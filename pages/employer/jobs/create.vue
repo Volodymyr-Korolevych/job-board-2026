@@ -9,15 +9,33 @@ const form = reactive({
   description: '',
   requirements: '',
   conditions: '',
-  tags: '' as string
+  tags: '' as string,
+  status: 'active'
 })
 
+const error = ref<string | null>(null)
+const saving = ref(false)
+
 const submit = async () => {
-  await $fetch('/api/jobs', {
-    method: 'POST',
-    body: { ...form, tags: form.tags.split(',').map(t => t.trim()).filter(Boolean) }
-  })
-  await navigateTo('/employer/jobs')
+  error.value = null
+  saving.value = true
+  try {
+    await $fetch('/api/jobs', {
+      method: 'POST',
+      body: { 
+        ...form, 
+        tags: form.tags
+          .split(',')
+          .map(t => t.trim())
+          .filter(Boolean)
+      }
+    })
+    await navigateTo('/employer/jobs')
+  } catch (e: any) {
+    error.value = e?.data?.statusMessage || 'Помилка створення вакансії'
+  } finally {
+    saving.value = false
+  }
 }
 </script>
 
@@ -25,15 +43,24 @@ const submit = async () => {
   <section class="max-w-xl space-y-4">
     <h1 class="text-lg font-semibold text-primary">Нова вакансія</h1>
 
-    <form @submit.prevent="submit" class="space-y-3 bg-white p-4 rounded-2xl border border-slate-200">
+    <div v-if="error" class="text-xs text-red-500">
+      {{ error }}
+    </div>
+
+    <form
+      @submit.prevent="submit"
+      class="space-y-3 bg-white p-4 rounded-2xl border border-slate-200"
+    >
       <div class="space-y-1">
         <label class="text-xs text-muted">Посада</label>
         <input
           v-model="form.title"
           type="text"
+          required
           class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
         />
       </div>
+
       <div class="space-y-1">
         <label class="text-xs text-muted">Місто</label>
         <input
@@ -74,6 +101,7 @@ const submit = async () => {
           <input
             v-model.number="form.salaryFrom"
             type="number"
+            min="0"
             class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
           />
         </div>
@@ -82,6 +110,7 @@ const submit = async () => {
           <input
             v-model.number="form.salaryTo"
             type="number"
+            min="0"
             class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
           />
         </div>
@@ -126,9 +155,10 @@ const submit = async () => {
 
       <button
         type="submit"
-        class="w-full text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90"
+        :disabled="saving"
+        class="w-full text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90 disabled:opacity-60"
       >
-        Зберегти
+        {{ saving ? 'Збереження...' : 'Створити' }}
       </button>
     </form>
   </section>

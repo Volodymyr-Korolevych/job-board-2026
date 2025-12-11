@@ -12,7 +12,7 @@ const form = reactive({
   staffCount: null as number | null
 })
 
-const { data } = await useFetch('/api/company')
+const { data, error: fetchError } = await useFetch('/api/company')
 
 if (data.value) {
   form.name = data.value.name || ''
@@ -49,6 +49,10 @@ const submit = async () => {
       Дані компанії відображаються у вакансіях і допомагають пошукачам краще вас
       зрозуміти.
     </p>
+
+    <div v-if="fetchError" class="text-xs text-red-500">
+      {{ fetchError.data?.statusMessage || 'Помилка завантаження профілю' }}
+    </div>
 
     <div v-if="error" class="text-xs text-red-500">
       {{ error }}

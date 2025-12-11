@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const company = await Company.findOne({ ownerId: user.id })
   if (!company) {
-    throw createError({ statusCode: 400, statusMessage: 'Create company profile first' })
+    throw createError({ statusCode: 400, statusMessage: 'Спочатку заповніть профіль компанії' })
   }
 
   const job = await Job.create({

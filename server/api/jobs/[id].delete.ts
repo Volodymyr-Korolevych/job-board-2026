@@ -1,4 +1,6 @@
 import Job from '../../models/Job'
+import Application from '../../models/Application'
+import Favorite from '../../models/Favorite'
 
 export default defineEventHandler(async (event) => {
   const id = event.context.params?.id
@@ -12,5 +14,9 @@ export default defineEventHandler(async (event) => {
   if (!job) {
     throw createError({ statusCode: 404, statusMessage: 'Job not found or not owner' })
   }
+
+  await Application.deleteMany({ jobId: job._id })
+  await Favorite.deleteMany({ jobId: job._id })
+
   return { success: true }
 })

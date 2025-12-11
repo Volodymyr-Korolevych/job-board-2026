@@ -14,6 +14,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Job not found or not owner' })
   }
 
-  const apps = await Application.find({ jobId: id }).populate('seekerId')
+  const apps = await Application.find({ jobId: id })
+    .populate('seekerId')
+    .sort({ createdAt: -1 })
+
   return apps
 })
