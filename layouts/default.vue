@@ -22,16 +22,20 @@ const logout = async () => {
 
         <div class="flex items-center gap-4 text-sm">
           <NuxtLink to="/jobs" class="hover:text-accent">Вакансії</NuxtLink>
-          <NuxtLink v-if="user?.role === 'seeker'" to="/profile/favorites" class="hover:text-accent">
-            Обране
-          </NuxtLink>
-          <NuxtLink
-            v-if="user?.role === 'employer'"
-            to="/employer/jobs"
-            class="hover:text-accent"
-          >
-            Мої вакансії
-          </NuxtLink>
+
+          <template v-if="user?.role === 'seeker'">
+            <NuxtLink to="/profile" class="hover:text-accent">Профіль</NuxtLink>
+            <NuxtLink to="/profile/favorites" class="hover:text-accent">Обране</NuxtLink>
+          </template>
+
+          <template v-if="user?.role === 'employer'">
+            <NuxtLink to="/employer/company" class="hover:text-accent">
+              Компанія
+            </NuxtLink>
+            <NuxtLink to="/employer/jobs" class="hover:text-accent">
+              Мої вакансії
+            </NuxtLink>
+          </template>
 
           <template v-if="!user">
             <NuxtLink
@@ -61,7 +65,9 @@ const logout = async () => {
     </main>
 
     <footer class="border-t border-slate-200 bg-white">
-      <div class="mx-auto max-w-5xl px-4 py-4 text-xs text-slate-500 flex justify-between">
+      <div
+        class="mx-auto max-w-5xl px-4 py-4 text-xs text-slate-500 flex justify-between"
+      >
         <span>© 2026 JobBoard-2026</span>
         <div class="flex gap-4">
           <NuxtLink to="/about" class="hover:text-accent">Про сервіс</NuxtLink>
