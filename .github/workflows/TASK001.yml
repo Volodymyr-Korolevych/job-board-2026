@@ -1,0 +1,787 @@
+name: TASK001 - Profiles on registration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  task001:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply TASK001 changes
+        run: |
+          mkdir -p pages/auth pages/profile pages/employer server/api/auth server/api server/api/profile server/api/company
+
+          # pages/auth/register.vue
+          cat <<'EOF' > pages/auth/register.vue
+          <script setup lang="ts">
+          const email = ref('')
+          const password = ref('')
+          const role = ref<'seeker' | 'employer'>('seeker')
+          const error = ref<string | null>(null)
+          const user = useAuthUser()
+
+          // Профіль пошукача
+          const seekerProfile = reactive({
+            fullName: '',
+            city: '',
+            desiredPosition: '',
+            level: 'junior',
+            cvLink: ''
+          })
+
+          // Профіль компанії
+          const companyProfile = reactive({
+            name: '',
+            city: '',
+            website: '',
+            description: '',
+            industry: '',
+            staffCount: null as number | null
+          })
+
+          const submit = async () => {
+            error.value = null
+            try {
+              const body: any = {
+                email: email.value,
+                password: password.value,
+                role: role.value
+              }
+
+              if (role.value === 'seeker') {
+                Object.assign(body, {
+                  fullName: seekerProfile.fullName,
+                  city: seekerProfile.city,
+                  desiredPosition: seekerProfile.desiredPosition,
+                  level: seekerProfile.level,
+                  cvLink: seekerProfile.cvLink
+                })
+              } else {
+                Object.assign(body, {
+                  companyName: companyProfile.name,
+                  companyCity: companyProfile.city,
+                  companyWebsite: companyProfile.website,
+                  companyDescription: companyProfile.description,
+                  companyIndustry: companyProfile.industry,
+                  companyStaffCount: companyProfile.staffCount
+                })
+              }
+
+              await $fetch('/api/auth/register', {
+                method: 'POST',
+                body
+              })
+
+              // Автоматичний логін після реєстрації
+              const loginRes: any = await $fetch('/api/auth/login', {
+                method: 'POST',
+                body: {
+                  email: email.value,
+                  password: password.value
+                }
+              })
+
+              user.value = loginRes.user
+
+              if (role.value === 'seeker') {
+                await navigateTo('/profile')
+              } else {
+                await navigateTo('/employer/company')
+              }
+            } catch (e: any) {
+              error.value = e?.data?.statusMessage || 'Помилка реєстрації'
+            }
+          }
+          </script>
+
+          <template>
+            <section
+              class="max-w-xl mx-auto bg-white p-6 rounded-2xl border border-slate-200 space-y-4"
+            >
+              <h1 class="text-lg font-semibold text-primary">Реєстрація</h1>
+
+              <div v-if="error" class="text-xs text-red-500">
+                {{ error }}
+              </div>
+
+              <form @submit.prevent="submit" class="space-y-4">
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Роль</label>
+                  <div class="flex gap-2 text-xs">
+                    <button
+                      type="button"
+                      @click="role = 'seeker'"
+                      :class="[
+                        'flex-1 px-3 py-2 rounded-xl border',
+                        role === 'seeker' ? 'border-accent bg-blue-50' : 'border-slate-300'
+                      ]"
+                    >
+                      Пошукач
+                    </button>
+                    <button
+                      type="button"
+                      @click="role = 'employer'"
+                      :class="[
+                        'flex-1 px-3 py-2 rounded-xl border',
+                        role === 'employer' ? 'border-accent bg-blue-50' : 'border-slate-300'
+                      ]"
+                    >
+                      Роботодавець
+                    </button>
+                  </div>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-3">
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Email</label>
+                    <input
+                      v-model="email"
+                      type="email"
+                      required
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Пароль</label>
+                    <input
+                      v-model="password"
+                      type="password"
+                      required
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+                </div>
+
+                <!-- Блок профілю пошукача -->
+                <div v-if="role === 'seeker'" class="space-y-3 border-t border-slate-200 pt-3">
+                  <h2 class="text-sm font-semibold text-primary">Профіль пошукача</h2>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Повне ім'я</label>
+                    <input
+                      v-model="seekerProfile.fullName"
+                      type="text"
+                      required
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Місто</label>
+                    <input
+                      v-model="seekerProfile.city"
+                      type="text"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Бажана посада</label>
+                    <input
+                      v-model="seekerProfile.desiredPosition"
+                      type="text"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                      <label class="text-xs text-muted">Рівень</label>
+                      <select
+                        v-model="seekerProfile.level"
+                        class="w-full text-xs px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                      >
+                        <option value="junior">Junior</option>
+                        <option value="middle">Middle</option>
+                        <option value="senior">Senior</option>
+                      </select>
+                    </div>
+                    <div class="space-y-1">
+                      <label class="text-xs text-muted">Лінк на CV</label>
+                      <input
+                        v-model="seekerProfile.cvLink"
+                        type="url"
+                        class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Блок профілю компанії -->
+                <div v-else class="space-y-3 border-t border-slate-200 pt-3">
+                  <h2 class="text-sm font-semibold text-primary">Профіль компанії</h2>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Назва компанії</label>
+                    <input
+                      v-model="companyProfile.name"
+                      type="text"
+                      required
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Місто</label>
+                    <input
+                      v-model="companyProfile.city"
+                      type="text"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Сайт або лінк</label>
+                    <input
+                      v-model="companyProfile.website"
+                      type="url"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Опис компанії</label>
+                    <textarea
+                      v-model="companyProfile.description"
+                      rows="3"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  class="w-full text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90"
+                >
+                  Зареєструватися
+                </button>
+              </form>
+
+              <p class="text-xs text-muted">
+                Вже маєте акаунт?
+                <NuxtLink to="/auth/login" class="text-accent underline">
+                  Увійти
+                </NuxtLink>
+              </p>
+            </section>
+          </template>
+          EOF
+
+          # layouts/default.vue
+          cat <<'EOF' > layouts/default.vue
+          <script setup lang="ts">
+          const user = useAuthUser()
+          const { data } = await useFetch('/api/auth/me')
+          if (data.value?.user) {
+            user.value = data.value.user
+          }
+
+          const logout = async () => {
+            await $fetch('/api/auth/logout', { method: 'POST' })
+            user.value = null
+            await navigateTo('/')
+          }
+          </script>
+
+          <template>
+            <div class="min-h-screen flex flex-col bg-slate-50">
+              <header class="border-b border-slate-200 bg-white">
+                <nav class="mx-auto max-w-5xl flex items-center justify-between px-4 py-3">
+                  <NuxtLink to="/" class="text-lg font-semibold tracking-tight text-primary">
+                    JobBoard-2026
+                  </NuxtLink>
+
+                  <div class="flex items-center gap-4 text-sm">
+                    <NuxtLink to="/jobs" class="hover:text-accent">Вакансії</NuxtLink>
+
+                    <template v-if="user?.role === 'seeker'">
+                      <NuxtLink to="/profile" class="hover:text-accent">Профіль</NuxtLink>
+                      <NuxtLink to="/profile/favorites" class="hover:text-accent">Обране</NuxtLink>
+                    </template>
+
+                    <template v-if="user?.role === 'employer'">
+                      <NuxtLink to="/employer/company" class="hover:text-accent">
+                        Компанія
+                      </NuxtLink>
+                      <NuxtLink to="/employer/jobs" class="hover:text-accent">
+                        Мої вакансії
+                      </NuxtLink>
+                    </template>
+
+                    <template v-if="!user">
+                      <NuxtLink
+                        to="/auth/login"
+                        class="px-3 py-1 rounded-full border border-slate-300 hover:border-accent"
+                      >
+                        Увійти
+                      </NuxtLink>
+                    </template>
+                    <template v-else>
+                      <span class="text-xs text-muted">
+                        {{ user.email }} ({{ user.role }})
+                      </span>
+                      <button
+                        @click="logout"
+                        class="px-3 py-1 rounded-full border border-slate-300 hover:border-accent"
+                      >
+                        Вийти
+                      </button>
+                    </template>
+                  </div>
+                </nav>
+              </header>
+
+              <main class="flex-1 mx-auto max-w-5xl w-full px-4 py-6">
+                <NuxtPage />
+              </main>
+
+              <footer class="border-t border-slate-200 bg-white">
+                <div
+                  class="mx-auto max-w-5xl px-4 py-4 text-xs text-slate-500 flex justify-between"
+                >
+                  <span>© 2026 JobBoard-2026</span>
+                  <div class="flex gap-4">
+                    <NuxtLink to="/about" class="hover:text-accent">Про сервіс</NuxtLink>
+                    <NuxtLink to="/contacts" class="hover:text-accent">Контакти</NuxtLink>
+                  </div>
+                </div>
+              </footer>
+            </div>
+          </template>
+          EOF
+
+          # pages/profile/index.vue
+          cat <<'EOF' > pages/profile/index.vue
+          <script setup lang="ts">
+          const user = useAuthUser()
+          const saving = ref(false)
+          const message = ref<string | null>(null)
+          const error = ref<string | null>(null)
+
+          const form = reactive({
+            fullName: '',
+            city: '',
+            desiredPosition: '',
+            level: 'junior',
+            cvLink: ''
+          })
+
+          const { data } = await useFetch('/api/profile')
+
+          if (data.value) {
+            form.fullName = data.value.fullName || ''
+            form.city = data.value.city || ''
+            form.desiredPosition = data.value.desiredPosition || ''
+            form.level = data.value.level || 'junior'
+            form.cvLink = data.value.cvLink || ''
+          }
+
+          const submit = async () => {
+            saving.value = true
+            message.value = null
+            error.value = null
+            try {
+              const res: any = await $fetch('/api/profile', {
+                method: 'PUT',
+                body: form
+              })
+              message.value = 'Профіль збережено'
+              // Оновлюємо локальний стейт користувача (мінімально)
+              if (user.value) {
+                user.value = {
+                  ...user.value,
+                  fullName: res.fullName,
+                  city: res.city,
+                  desiredPosition: res.desiredPosition,
+                  level: res.level
+                }
+              }
+            } catch (e: any) {
+              error.value = e?.data?.statusMessage || 'Помилка збереження профілю'
+            } finally {
+              saving.value = false
+            }
+          }
+          </script>
+
+          <template>
+            <section class="max-w-xl space-y-4">
+              <h1 class="text-lg font-semibold text-primary">Мій профіль</h1>
+
+              <p class="text-xs text-muted">
+                Дані цього профілю використовуються при відгуку на вакансії.
+              </p>
+
+              <div v-if="error" class="text-xs text-red-500">
+                {{ error }}
+              </div>
+              <div v-if="message" class="text-xs text-emerald-600">
+                {{ message }}
+              </div>
+
+              <form
+                @submit.prevent="submit"
+                class="space-y-3 bg-white p-4 rounded-2xl border border-slate-200"
+              >
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Повне ім'я</label>
+                  <input
+                    v-model="form.fullName"
+                    type="text"
+                    required
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Місто</label>
+                  <input
+                    v-model="form.city"
+                    type="text"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Бажана посада</label>
+                  <input
+                    v-model="form.desiredPosition"
+                    type="text"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Рівень</label>
+                    <select
+                      v-model="form.level"
+                      class="w-full text-xs px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    >
+                      <option value="junior">Junior</option>
+                      <option value="middle">Middle</option>
+                      <option value="senior">Senior</option>
+                    </select>
+                  </div>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Лінк на CV</label>
+                    <input
+                      v-model="form.cvLink"
+                      type="url"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  :disabled="saving"
+                  class="w-full text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90 disabled:opacity-60"
+                >
+                  {{ saving ? 'Збереження...' : 'Зберегти' }}
+                </button>
+              </form>
+            </section>
+          </template>
+          EOF
+
+          # pages/employer/company.vue
+          cat <<'EOF' > pages/employer/company.vue
+          <script setup lang="ts">
+          const saving = ref(false)
+          const message = ref<string | null>(null)
+          const error = ref<string | null>(null)
+
+          const form = reactive({
+            name: '',
+            city: '',
+            website: '',
+            description: '',
+            industry: '',
+            staffCount: null as number | null
+          })
+
+          const { data } = await useFetch('/api/company')
+
+          if (data.value) {
+            form.name = data.value.name || ''
+            form.city = data.value.city || ''
+            form.website = data.value.website || ''
+            form.description = data.value.description || ''
+            form.industry = data.value.industry || ''
+            form.staffCount = data.value.staffCount || null
+          }
+
+          const submit = async () => {
+            saving.value = true
+            message.value = null
+            error.value = null
+            try {
+              await $fetch('/api/company', {
+                method: 'PUT',
+                body: form
+              })
+              message.value = 'Профіль компанії збережено'
+            } catch (e: any) {
+              error.value = e?.data?.statusMessage || 'Помилка збереження профілю компанії'
+            } finally {
+              saving.value = false
+            }
+          }
+          </script>
+
+          <template>
+            <section class="max-w-xl space-y-4">
+              <h1 class="text-lg font-semibold text-primary">Профіль компанії</h1>
+
+              <p class="text-xs text-muted">
+                Дані компанії відображаються у вакансіях і допомагають пошукачам краще вас
+                зрозуміти.
+              </p>
+
+              <div v-if="error" class="text-xs text-red-500">
+                {{ error }}
+              </div>
+              <div v-if="message" class="text-xs text-emerald-600">
+                {{ message }}
+              </div>
+
+              <form
+                @submit.prevent="submit"
+                class="space-y-3 bg-white p-4 rounded-2xl border border-slate-200"
+              >
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Назва компанії</label>
+                  <input
+                    v-model="form.name"
+                    type="text"
+                    required
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Місто</label>
+                  <input
+                    v-model="form.city"
+                    type="text"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Сайт або лінк</label>
+                  <input
+                    v-model="form.website"
+                    type="url"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Сфера діяльності</label>
+                  <input
+                    v-model="form.industry"
+                    type="text"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Кількість співробітників (опційно)</label>
+                  <input
+                    v-model.number="form.staffCount"
+                    type="number"
+                    min="1"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Опис компанії</label>
+                  <textarea
+                    v-model="form.description"
+                    rows="3"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  :disabled="saving"
+                  class="w-full text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90 disabled:opacity-60"
+                >
+                  {{ saving ? 'Збереження...' : 'Зберегти' }}
+                </button>
+              </form>
+            </section>
+          </template>
+          EOF
+
+          # server/api/auth/register.post.ts
+          cat <<'EOF' > server/api/auth/register.post.ts
+          import bcrypt from 'bcrypt'
+          import User from '../../models/User'
+          import Company from '../../models/Company'
+
+          export default defineEventHandler(async (event) => {
+            const body = await readBody(event)
+            const {
+              email,
+              password,
+              role,
+
+              // поля профілю пошукача
+              fullName,
+              city,
+              desiredPosition,
+              level,
+              cvLink,
+
+              // поля профілю компанії
+              companyName,
+              companyCity,
+              companyWebsite,
+              companyDescription,
+              companyIndustry,
+              companyStaffCount
+            } = body
+
+            if (!email || !password || !role) {
+              throw createError({ statusCode: 400, statusMessage: 'email, password, role required' })
+            }
+
+            const existing = await User.findOne({ email })
+            if (existing) {
+              throw createError({ statusCode: 400, statusMessage: 'Email already used' })
+            }
+
+            const passwordHash = await bcrypt.hash(password, 10)
+
+            const userData: any = {
+              email,
+              passwordHash,
+              role
+            }
+
+            if (role === 'seeker') {
+              userData.fullName = fullName || ''
+              userData.city = city || ''
+              userData.desiredPosition = desiredPosition || ''
+              userData.level = level || 'junior'
+              userData.cvLink = cvLink || ''
+            }
+
+            const user = await User.create(userData)
+
+            if (role === 'employer') {
+              // Створюємо компанію одразу при реєстрації
+              await Company.create({
+                ownerId: user._id,
+                name: companyName || 'Нова компанія',
+                city: companyCity || '',
+                website: companyWebsite || '',
+                description: companyDescription || '',
+                industry: companyIndustry || '',
+                staffCount: companyStaffCount || null
+              })
+            }
+
+            return { success: true, user: { id: user._id, email: user.email, role: user.role } }
+          })
+          EOF
+
+          # server/api/profile.get.ts
+          cat <<'EOF' > server/api/profile.get.ts
+          import User from '../models/User'
+
+          export default defineEventHandler(async (event) => {
+            // @ts-ignore
+            const ctxUser = event.context.user
+            if (!ctxUser) {
+              throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+            }
+
+            const user = await User.findById(ctxUser.id)
+            if (!user) {
+              throw createError({ statusCode: 404, statusMessage: 'User not found' })
+            }
+
+            if (user.role !== 'seeker') {
+              throw createError({
+                statusCode: 400,
+                statusMessage: 'Profile is available only for seekers'
+              })
+            }
+
+            return {
+              fullName: user.fullName || '',
+              city: user.city || '',
+              desiredPosition: user.desiredPosition || '',
+              level: user.level || 'junior',
+              cvLink: user.cvLink || ''
+            }
+          })
+          EOF
+
+          # server/api/profile.put.ts
+          cat <<'EOF' > server/api/profile.put.ts
+          import User from '../models/User'
+
+          export default defineEventHandler(async (event) => {
+            // @ts-ignore
+            const ctxUser = event.context.user
+            if (!ctxUser) {
+              throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+            }
+
+            const body = await readBody(event)
+            const { fullName, city, desiredPosition, level, cvLink } = body
+
+            const user = await User.findById(ctxUser.id)
+            if (!user) {
+              throw createError({ statusCode: 404, statusMessage: 'User not found' })
+            }
+
+            if (user.role !== 'seeker') {
+              throw createError({
+                statusCode: 400,
+                statusMessage: 'Profile is available only for seekers'
+              })
+            }
+
+            user.fullName = fullName || ''
+            user.city = city || ''
+            user.desiredPosition = desiredPosition || ''
+            user.level = level || 'junior'
+            user.cvLink = cvLink || ''
+
+            await user.save()
+
+            return {
+              fullName: user.fullName || '',
+              city: user.city || '',
+              desiredPosition: user.desiredPosition || '',
+              level: user.level || 'junior',
+              cvLink: user.cvLink || ''
+            }
+          })
+          EOF
+
+      - name: Commit and push TASK001
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "TASK001: profiles on registration" || echo "No changes to commit"
+          git push
