@@ -1,0 +1,955 @@
+name: TASK002 - Employer functionality
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  task002:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply TASK002 changes
+        run: |
+          mkdir -p pages/employer/jobs pages/employer server/api/employer server/api/jobs server/api/jobs/[id] server/api/applications
+
+          # pages/employer/company.vue
+          cat <<'EOF' > pages/employer/company.vue
+          <script setup lang="ts">
+          const saving = ref(false)
+          const message = ref<string | null>(null)
+          const error = ref<string | null>(null)
+
+          const form = reactive({
+            name: '',
+            city: '',
+            website: '',
+            description: '',
+            industry: '',
+            staffCount: null as number | null
+          })
+
+          const { data, error: fetchError } = await useFetch('/api/company')
+
+          if (data.value) {
+            form.name = data.value.name || ''
+            form.city = data.value.city || ''
+            form.website = data.value.website || ''
+            form.description = data.value.description || ''
+            form.industry = data.value.industry || ''
+            form.staffCount = data.value.staffCount || null
+          }
+
+          const submit = async () => {
+            saving.value = true
+            message.value = null
+            error.value = null
+            try {
+              await $fetch('/api/company', {
+                method: 'PUT',
+                body: form
+              })
+              message.value = 'Профіль компанії збережено'
+            } catch (e: any) {
+              error.value = e?.data?.statusMessage || 'Помилка збереження профілю компанії'
+            } finally {
+              saving.value = false
+            }
+          }
+          </script>
+
+          <template>
+            <section class="max-w-xl space-y-4">
+              <h1 class="text-lg font-semibold text-primary">Профіль компанії</h1>
+
+              <p class="text-xs text-muted">
+                Дані компанії відображаються у вакансіях і допомагають пошукачам краще вас
+                зрозуміти.
+              </p>
+
+              <div v-if="fetchError" class="text-xs text-red-500">
+                {{ fetchError.data?.statusMessage || 'Помилка завантаження профілю' }}
+              </div>
+
+              <div v-if="error" class="text-xs text-red-500">
+                {{ error }}
+              </div>
+              <div v-if="message" class="text-xs text-emerald-600">
+                {{ message }}
+              </div>
+
+              <form
+                @submit.prevent="submit"
+                class="space-y-3 bg-white p-4 rounded-2xl border border-slate-200"
+              >
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Назва компанії</label>
+                  <input
+                    v-model="form.name"
+                    type="text"
+                    required
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Місто</label>
+                  <input
+                    v-model="form.city"
+                    type="text"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Сайт або лінк</label>
+                  <input
+                    v-model="form.website"
+                    type="url"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Сфера діяльності</label>
+                  <input
+                    v-model="form.industry"
+                    type="text"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Кількість співробітників (опційно)</label>
+                  <input
+                    v-model.number="form.staffCount"
+                    type="number"
+                    min="1"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Опис компанії</label>
+                  <textarea
+                    v-model="form.description"
+                    rows="3"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  :disabled="saving"
+                  class="w-full text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90 disabled:opacity-60"
+                >
+                  {{ saving ? 'Збереження...' : 'Зберегти' }}
+                </button>
+              </form>
+            </section>
+          </template>
+          EOF
+
+          # pages/employer/jobs.vue
+          cat <<'EOF' > pages/employer/jobs.vue
+          <script setup lang="ts">
+          const { data: jobs, refresh, error } = await useFetch('/api/employer/jobs')
+
+          const removeJob = async (id: string) => {
+            if (!confirm('Видалити вакансію?')) return
+            await $fetch(`/api/jobs/${id}`, { method: 'DELETE' })
+            await refresh()
+          }
+          </script>
+
+          <template>
+            <section class="space-y-4">
+              <div class="flex items-center justify-between">
+                <h1 class="text-lg font-semibold text-primary">Мої вакансії</h1>
+                <NuxtLink
+                  to="/employer/jobs/create"
+                  class="text-xs px-3 py-2 rounded-xl bg-accent text-white hover:opacity-90"
+                >
+                  Створити вакансію
+                </NuxtLink>
+              </div>
+
+              <div v-if="error" class="text-xs text-red-500">
+                {{ error.data?.statusMessage || 'Помилка завантаження вакансій' }}
+              </div>
+
+              <div v-if="!error && !jobs?.length" class="text-sm text-muted">
+                Ви ще не створили жодної вакансії.
+              </div>
+
+              <div v-if="jobs?.length" class="space-y-3">
+                <article
+                  v-for="job in jobs"
+                  :key="job._id"
+                  class="bg-white p-4 rounded-2xl border border-slate-200 flex justify-between items-start"
+                >
+                  <div class="space-y-1">
+                    <h2 class="text-base font-semibold text-primary">
+                      {{ job.title }}
+                    </h2>
+                    <p class="text-xs text-muted">
+                      {{ job.city || 'Місто не вказано' }} · {{ job.employmentType }} ·
+                      {{ job.workFormat }}
+                    </p>
+                    <p class="text-xs text-muted">
+                      Статус:
+                      <span
+                        :class="[
+                          'px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wide',
+                          job.status === 'active'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-slate-100 text-slate-500'
+                        ]"
+                      >
+                        {{ job.status === 'active' ? 'Активна' : 'Неактивна' }}
+                      </span>
+                    </p>
+                  </div>
+                  <div class="flex flex-col items-end gap-2 text-xs">
+                    <div class="text-[11px] text-muted">
+                      Переглядів: {{ job.views || 0 }} · Відгуків: {{ job.applicationsCount || 0 }}
+                    </div>
+                    <div class="flex gap-2">
+                      <NuxtLink
+                        :to="`/employer/jobs/${job._id}/edit`"
+                        class="px-3 py-1 rounded-xl border border-slate-300 hover:border-accent"
+                      >
+                        Редагувати
+                      </NuxtLink>
+                      <NuxtLink
+                        :to="`/employer/jobs/${job._id}/applications`"
+                        class="px-3 py-1 rounded-xl border border-slate-300 hover:border-accent"
+                      >
+                        Відгуки
+                      </NuxtLink>
+                      <button
+                        @click="removeJob(job._id)"
+                        class="px-3 py-1 rounded-xl border border-red-300 text-red-600 hover:bg-red-50"
+                      >
+                        Видалити
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </section>
+          </template>
+          EOF
+
+          # pages/employer/jobs/create.vue
+          cat <<'EOF' > pages/employer/jobs/create.vue
+          <script setup lang="ts">
+          const form = reactive({
+            title: '',
+            city: '',
+            workFormat: 'office',
+            employmentType: 'full-time',
+            salaryFrom: null as number | null,
+            salaryTo: null as number | null,
+            description: '',
+            requirements: '',
+            conditions: '',
+            tags: '' as string,
+            status: 'active'
+          })
+
+          const error = ref<string | null>(null)
+          const saving = ref(false)
+
+          const submit = async () => {
+            error.value = null
+            saving.value = true
+            try {
+              await $fetch('/api/jobs', {
+                method: 'POST',
+                body: { 
+                  ...form, 
+                  tags: form.tags
+                    .split(',')
+                    .map(t => t.trim())
+                    .filter(Boolean)
+                }
+              })
+              await navigateTo('/employer/jobs')
+            } catch (e: any) {
+              error.value = e?.data?.statusMessage || 'Помилка створення вакансії'
+            } finally {
+              saving.value = false
+            }
+          }
+          </script>
+
+          <template>
+            <section class="max-w-xl space-y-4">
+              <h1 class="text-lg font-semibold text-primary">Нова вакансія</h1>
+
+              <div v-if="error" class="text-xs text-red-500">
+                {{ error }}
+              </div>
+
+              <form
+                @submit.prevent="submit"
+                class="space-y-3 bg-white p-4 rounded-2xl border border-slate-200"
+              >
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Посада</label>
+                  <input
+                    v-model="form.title"
+                    type="text"
+                    required
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Місто</label>
+                  <input
+                    v-model="form.city"
+                    type="text"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 text-xs">
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Формат роботи</label>
+                    <select
+                      v-model="form.workFormat"
+                      class="w-full px-3 py-2 border rounded-xl outline-none focus:border-accent text-xs"
+                    >
+                      <option value="office">Офіс</option>
+                      <option value="remote">Remote</option>
+                      <option value="hybrid">Hybrid</option>
+                    </select>
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Тип зайнятості</label>
+                    <select
+                      v-model="form.employmentType"
+                      class="w-full px-3 py-2 border rounded-xl outline-none focus:border-accent text-xs"
+                    >
+                      <option value="full-time">Повна</option>
+                      <option value="part-time">Часткова</option>
+                      <option value="freelance">Фріланс</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Зарплата від</label>
+                    <input
+                      v-model.number="form.salaryFrom"
+                      type="number"
+                      min="0"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Зарплата до</label>
+                    <input
+                      v-model.number="form.salaryTo"
+                      type="number"
+                      min="0"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Опис</label>
+                  <textarea
+                    v-model="form.description"
+                    rows="3"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Вимоги</label>
+                  <textarea
+                    v-model="form.requirements"
+                    rows="3"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Умови</label>
+                  <textarea
+                    v-model="form.conditions"
+                    rows="3"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Теги (через кому)</label>
+                  <input
+                    v-model="form.tags"
+                    type="text"
+                    placeholder="Frontend, Junior, Remote"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  :disabled="saving"
+                  class="w-full text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90 disabled:opacity-60"
+                >
+                  {{ saving ? 'Збереження...' : 'Створити' }}
+                </button>
+              </form>
+            </section>
+          </template>
+          EOF
+
+          # pages/employer/jobs/[id]/edit.vue
+          cat <<'EOF' > pages/employer/jobs/[id]/edit.vue
+          <script setup lang="ts">
+          const route = useRoute()
+          const id = route.params.id as string
+
+          const error = ref<string | null>(null)
+          const saving = ref(false)
+
+          const form = reactive({
+            title: '',
+            city: '',
+            workFormat: 'office',
+            employmentType: 'full-time',
+            salaryFrom: null as number | null,
+            salaryTo: null as number | null,
+            description: '',
+            requirements: '',
+            conditions: '',
+            tags: '' as string,
+            status: 'active'
+          })
+
+          const { data, error: fetchError } = await useFetch(`/api/jobs/${id}`)
+
+          if (data.value) {
+            form.title = data.value.title || ''
+            form.city = data.value.city || ''
+            form.workFormat = data.value.workFormat || 'office'
+            form.employmentType = data.value.employmentType || 'full-time'
+            form.salaryFrom = data.value.salaryFrom || null
+            form.salaryTo = data.value.salaryTo || null
+            form.description = data.value.description || ''
+            form.requirements = data.value.requirements || ''
+            form.conditions = data.value.conditions || ''
+            form.status = data.value.status || 'active'
+            form.tags = (data.value.tags || []).join(', ')
+          }
+
+          const submit = async () => {
+            error.value = null
+            saving.value = true
+            try {
+              await $fetch(`/api/jobs/${id}`, {
+                method: 'PUT',
+                body: {
+                  ...form,
+                  tags: form.tags
+                    .split(',')
+                    .map(t => t.trim())
+                    .filter(Boolean)
+                }
+              })
+              await navigateTo('/employer/jobs')
+            } catch (e: any) {
+              error.value = e?.data?.statusMessage || 'Помилка збереження вакансії'
+            } finally {
+              saving.value = false
+            }
+          }
+          </script>
+
+          <template>
+            <section class="max-w-xl space-y-4">
+              <h1 class="text-lg font-semibold text-primary">Редагування вакансії</h1>
+
+              <div v-if="fetchError" class="text-xs text-red-500">
+                {{ fetchError.data?.statusMessage || 'Помилка завантаження вакансії' }}
+              </div>
+              <div v-if="error" class="text-xs text-red-500">
+                {{ error }}
+              </div>
+
+              <form
+                v-if="!fetchError"
+                @submit.prevent="submit"
+                class="space-y-3 bg-white p-4 rounded-2xl border border-slate-200"
+              >
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Посада</label>
+                  <input
+                    v-model="form.title"
+                    type="text"
+                    required
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Місто</label>
+                  <input
+                    v-model="form.city"
+                    type="text"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 text-xs">
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Формат роботи</label>
+                    <select
+                      v-model="form.workFormat"
+                      class="w-full px-3 py-2 border rounded-xl outline-none focus:border-accent text-xs"
+                    >
+                      <option value="office">Офіс</option>
+                      <option value="remote">Remote</option>
+                      <option value="hybrid">Hybrid</option>
+                    </select>
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Тип зайнятості</label>
+                    <select
+                      v-model="form.employmentType"
+                      class="w-full px-3 py-2 border rounded-xl outline-none focus:border-accent text-xs"
+                    >
+                      <option value="full-time">Повна</option>
+                      <option value="part-time">Часткова</option>
+                      <option value="freelance">Фріланс</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Зарплата від</label>
+                    <input
+                      v-model.number="form.salaryFrom"
+                      type="number"
+                      min="0"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Зарплата до</label>
+                    <input
+                      v-model.number="form.salaryTo"
+                      type="number"
+                      min="0"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Опис</label>
+                  <textarea
+                    v-model="form.description"
+                    rows="3"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Вимоги</label>
+                  <textarea
+                    v-model="form.requirements"
+                    rows="3"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Умови</label>
+                  <textarea
+                    v-model="form.conditions"
+                    rows="3"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Теги (через кому)</label>
+                  <input
+                    v-model="form.tags"
+                    type="text"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Статус вакансії</label>
+                  <select
+                    v-model="form.status"
+                    class="w-full px-3 py-2 border rounded-xl outline-none focus:border-accent text-xs"
+                  >
+                    <option value="active">Активна</option>
+                    <option value="inactive">Неактивна</option>
+                  </select>
+                </div>
+
+                <button
+                  type="submit"
+                  :disabled="saving"
+                  class="w-full text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90 disabled:opacity-60"
+                >
+                  {{ saving ? 'Збереження...' : 'Зберегти' }}
+                </button>
+              </form>
+            </section>
+          </template>
+          EOF
+
+          # pages/employer/jobs/[id]/applications.vue
+          cat <<'EOF' > pages/employer/jobs/[id]/applications.vue
+          <script setup lang="ts">
+          const route = useRoute()
+          const id = route.params.id as string
+
+          const { data: job, error: jobError } = await useFetch(`/api/jobs/${id}`)
+          const { data: applications, error: appsError, refresh } = await useFetch(
+            `/api/jobs/${id}/applications`
+          )
+
+          const updateStatus = async (appId: string, status: string) => {
+            await $fetch(`/api/applications/${appId}`, {
+              method: 'PUT',
+              body: { status }
+            })
+            await refresh()
+          }
+
+          const statusLabel = (s: string) => {
+            if (s === 'new') return 'Новий'
+            if (s === 'viewed') return 'Переглянуто'
+            if (s === 'invited') return 'Запрошено'
+            if (s === 'rejected') return 'Відмова'
+            return s
+          }
+          </script>
+
+          <template>
+            <section class="space-y-4">
+              <div class="flex items-center gap-3">
+                <NuxtLink
+                  to="/employer/jobs"
+                  class="text-xs text-accent underline underline-offset-2"
+                >
+                  ← До списку вакансій
+                </NuxtLink>
+              </div>
+
+              <div v-if="jobError" class="text-xs text-red-500">
+                {{ jobError.data?.statusMessage || 'Помилка завантаження вакансії' }}
+              </div>
+
+              <div v-if="job" class="space-y-1">
+                <h1 class="text-lg font-semibold text-primary">
+                  Відгуки на вакансію: {{ job.title }}
+                </h1>
+                <p class="text-xs text-muted">
+                  {{ job.city || 'Місто не вказано' }} · {{ job.employmentType }} ·
+                  {{ job.workFormat }}
+                </p>
+              </div>
+
+              <div v-if="appsError" class="text-xs text-red-500">
+                {{ appsError.data?.statusMessage || 'Помилка завантаження відгуків' }}
+              </div>
+
+              <div v-if="!appsError && !applications?.length" class="text-sm text-muted">
+                Відгуків на цю вакансію ще немає.
+              </div>
+
+              <div v-if="applications?.length" class="space-y-3">
+                <article
+                  v-for="app in applications"
+                  :key="app._id"
+                  class="bg-white p-4 rounded-2xl border border-slate-200 space-y-2"
+                >
+                  <div class="flex justify-between items-start gap-4">
+                    <div class="space-y-1">
+                      <h2 class="text-sm font-semibold text-primary">
+                        {{ app.seekerId?.fullName || 'Анонімний кандидат' }}
+                      </h2>
+                      <p class="text-xs text-muted">
+                        {{ app.seekerId?.city || 'Місто не вказано' }}
+                      </p>
+                      <p class="text-xs text-muted" v-if="app.seekerId?.desiredPosition">
+                        Бажана посада: {{ app.seekerId.desiredPosition }}
+                      </p>
+                      <p class="text-xs text-muted" v-if="app.seekerId?.cvLink">
+                        CV:
+                        <a
+                          :href="app.seekerId.cvLink"
+                          target="_blank"
+                          rel="noreferrer"
+                          class="text-accent underline"
+                        >
+                          переглянути
+                        </a>
+                      </p>
+                    </div>
+                    <div class="text-right space-y-1">
+                      <div
+                        class="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-[10px] uppercase tracking-wide text-slate-600"
+                      >
+                        {{ statusLabel(app.status) }}
+                      </div>
+                      <p class="text-[11px] text-muted">
+                        {{ new Date(app.createdAt).toLocaleString('uk-UA') }}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div v-if="app.message" class="text-xs text-slate-700 whitespace-pre-line">
+                    {{ app.message }}
+                  </div>
+
+                  <div class="flex flex-wrap gap-2 text-[11px] mt-2">
+                    <button
+                      v-if="app.status !== 'viewed'"
+                      @click="updateStatus(app._id, 'viewed')"
+                      class="px-2.5 py-1 rounded-full border border-slate-300 hover:border-accent"
+                    >
+                      Позначити як переглянутий
+                    </button>
+                    <button
+                      v-if="app.status !== 'invited'"
+                      @click="updateStatus(app._id, 'invited')"
+                      class="px-2.5 py-1 rounded-full border border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                    >
+                      Запросити на співбесіду
+                    </button>
+                    <button
+                      v-if="app.status !== 'rejected'"
+                      @click="updateStatus(app._id, 'rejected')"
+                      class="px-2.5 py-1 rounded-full border border-red-300 text-red-600 hover:bg-red-50"
+                    >
+                      Відмова
+                    </button>
+                  </div>
+                </article>
+              </div>
+            </section>
+          </template>
+          EOF
+
+          # server/api/employer/jobs.get.ts
+          cat <<'EOF' > server/api/employer/jobs.get.ts
+          import Job from '../../models/Job'
+          import Application from '../../models/Application'
+
+          export default defineEventHandler(async (event) => {
+            // @ts-ignore
+            const user = event.context.user
+            if (!user || user.role !== 'employer') {
+              throw createError({ statusCode: 401, statusMessage: 'Only employers' })
+            }
+
+            const jobs = await Job.find({ employerId: user.id }).sort({ createdAt: -1 }).lean()
+
+            const jobIds = jobs.map(j => j._id)
+            const counts = await Application.aggregate([
+              { $match: { jobId: { $in: jobIds } } },
+              { $group: { _id: '$jobId', count: { $sum: 1 } } }
+            ])
+
+            const mapCounts = new Map<string, number>()
+            counts.forEach((c: any) => {
+              mapCounts.set(String(c._id), c.count)
+            })
+
+            const withCounts = jobs.map((job: any) => ({
+              ...job,
+              applicationsCount: mapCounts.get(String(job._id)) || 0
+            }))
+
+            return withCounts
+          })
+          EOF
+
+          # server/api/jobs/index.post.ts
+          cat <<'EOF' > server/api/jobs/index.post.ts
+          import Job from '../../models/Job'
+          import Company from '../../models/Company'
+
+          export default defineEventHandler(async (event) => {
+            // @ts-ignore
+            const user = event.context.user
+            if (!user || user.role !== 'employer') {
+              throw createError({ statusCode: 401, statusMessage: 'Only employers' })
+            }
+
+            const body = await readBody(event)
+            const company = await Company.findOne({ ownerId: user.id })
+            if (!company) {
+              throw createError({ statusCode: 400, statusMessage: 'Спочатку заповніть профіль компанії' })
+            }
+
+            const job = await Job.create({
+              ...body,
+              companyId: company._id,
+              employerId: user.id
+            })
+
+            return job
+          })
+          EOF
+
+          # server/api/jobs/[id].get.ts
+          cat <<'EOF' > server/api/jobs/[id].get.ts
+          import Job from '../../models/Job'
+
+          export default defineEventHandler(async (event) => {
+            const id = event.context.params?.id
+            const job = await Job.findById(id)
+            if (!job) {
+              throw createError({ statusCode: 404, statusMessage: 'Job not found' })
+            }
+            // increment views (fire and forget)
+            Job.findByIdAndUpdate(id, { $inc: { views: 1 } }).exec()
+            return job
+          })
+          EOF
+
+          # server/api/jobs/[id].put.ts
+          cat <<'EOF' > server/api/jobs/[id].put.ts
+          import Job from '../../models/Job'
+
+          export default defineEventHandler(async (event) => {
+            const id = event.context.params?.id
+            // @ts-ignore
+            const user = event.context.user
+            if (!user || user.role !== 'employer') {
+              throw createError({ statusCode: 401, statusMessage: 'Only employers' })
+            }
+
+            const body = await readBody(event)
+            const job = await Job.findOneAndUpdate(
+              { _id: id, employerId: user.id },
+              body,
+              { new: true }
+            )
+            if (!job) {
+              throw createError({ statusCode: 404, statusMessage: 'Job not found or not owner' })
+            }
+            return job
+          })
+          EOF
+
+          # server/api/jobs/[id].delete.ts
+          cat <<'EOF' > server/api/jobs/[id].delete.ts
+          import Job from '../../models/Job'
+          import Application from '../../models/Application'
+          import Favorite from '../../models/Favorite'
+
+          export default defineEventHandler(async (event) => {
+            const id = event.context.params?.id
+            // @ts-ignore
+            const user = event.context.user
+            if (!user || user.role !== 'employer') {
+              throw createError({ statusCode: 401, statusMessage: 'Only employers' })
+            }
+
+            const job = await Job.findOneAndDelete({ _id: id, employerId: user.id })
+            if (!job) {
+              throw createError({ statusCode: 404, statusMessage: 'Job not found or not owner' })
+            }
+
+            await Application.deleteMany({ jobId: job._id })
+            await Favorite.deleteMany({ jobId: job._id })
+
+            return { success: true }
+          })
+          EOF
+
+          # server/api/jobs/[id]/applications.get.ts
+          cat <<'EOF' > server/api/jobs/[id]/applications.get.ts
+          import Application from '../../../models/Application'
+          import Job from '../../../models/Job'
+
+          export default defineEventHandler(async (event) => {
+            const id = event.context.params?.id
+            // @ts-ignore
+            const user = event.context.user
+            if (!user || user.role !== 'employer') {
+              throw createError({ statusCode: 401, statusMessage: 'Only employers' })
+            }
+
+            const job = await Job.findOne({ _id: id, employerId: user.id })
+            if (!job) {
+              throw createError({ statusCode: 404, statusMessage: 'Job not found or not owner' })
+            }
+
+            const apps = await Application.find({ jobId: id })
+              .populate('seekerId')
+              .sort({ createdAt: -1 })
+
+            return apps
+          })
+          EOF
+
+          # server/api/applications/[id].put.ts
+          cat <<'EOF' > server/api/applications/[id].put.ts
+          import Application from '../../models/Application'
+          import Job from '../../models/Job'
+
+          export default defineEventHandler(async (event) => {
+            const id = event.context.params?.id
+            // @ts-ignore
+            const user = event.context.user
+            if (!user || user.role !== 'employer') {
+              throw createError({ statusCode: 401, statusMessage: 'Only employers' })
+            }
+
+            const body = await readBody(event)
+            const { status } = body
+
+            if (!['new', 'viewed', 'invited', 'rejected'].includes(status)) {
+              throw createError({ statusCode: 400, statusMessage: 'Invalid status' })
+            }
+
+            const app = await Application.findById(id)
+            if (!app) {
+              throw createError({ statusCode: 404, statusMessage: 'Application not found' })
+            }
+
+            const job = await Job.findById(app.jobId)
+            if (!job || String(job.employerId) !== String(user.id)) {
+              throw createError({ statusCode: 403, statusMessage: 'Not owner of the job' })
+            }
+
+            app.status = status
+            await app.save()
+
+            return app
+          })
+          EOF
+
+      - name: Commit and push TASK002
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "TASK002: employer functionality" || echo "No changes to commit"
+          git push
