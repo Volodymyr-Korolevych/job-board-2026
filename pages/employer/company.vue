@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const saving = ref(false)
-const saved = ref(false) // показ "Збережено ✓" на місці кнопки
+const saved = ref(false)
 const error = ref<string | null>(null)
 
 const form = reactive({
@@ -33,6 +33,8 @@ const clearFieldErrors = () => {
   fieldErrors.staffCount = ''
 }
 
+const normalizeUrl = (url: string) => url.trim()
+
 const validate = () => {
   clearFieldErrors()
   let ok = true
@@ -42,14 +44,21 @@ const validate = () => {
     ok = false
   }
 
-  if (form.website && !/^https?:\/\/.+/i.test(form.website.trim())) {
-    fieldErrors.website = 'Вкажіть коректне посилання (https://...)'
-    ok = false
+  if (form.website) {
+    const u = normalizeUrl(form.website)
+    // дозволяємо тільки http/https
+    if (!/^https?:\/\/.+/i.test(u)) {
+      fieldErrors.website = 'Вкажіть коректне посилання (наприклад, https://company.com)'
+      ok = false
+    }
   }
 
-  if (form.staffCount !== null && (Number.isNaN(form.staffCount) || form.staffCount < 1)) {
-    fieldErrors.staffCount = 'Кількість співробітників має бути числом від 1'
-    ok = false
+  if (form.staffCount !== null) {
+    const n = Number(form.staffCount)
+    if (Number.isNaN(n) || n < 1) {
+      fieldErrors.staffCount = 'Кількість співробітників має бути числом від 1'
+      ok = false
+    }
   }
 
   return ok
@@ -92,7 +101,6 @@ const hasChanges = computed(() => {
 watch(
   () => ({ ...form }),
   () => {
-    // якщо користувач щось змінив — прибираємо "Збережено ✓"
     if (saved.value) saved.value = false
   },
   { deep: true }
@@ -106,7 +114,6 @@ const submit = async () => {
     error.value = 'Перевірте поля форми'
     return
   }
-
   if (!hasChanges.value) return
 
   saving.value = true
@@ -115,12 +122,9 @@ const submit = async () => {
       method: 'PUT',
       body: form
     })
-    applyFromServer(updated) // оновлюємо initial, щоб кнопка зникла
+    applyFromServer(updated)
     saved.value = true
-    // ховаємо "Збережено ✓" через 2 секунди
-    setTimeout(() => {
-      saved.value = false
-    }, 2000)
+    setTimeout(() => (saved.value = false), 2000)
   } catch (e: any) {
     error.value = e?.data?.statusMessage || 'Не вдалося зберегти профіль компанії'
   } finally {
@@ -145,8 +149,10 @@ const submit = async () => {
       {{ error }}
     </div>
 
+    <!-- novalidate: вимикає браузерні англ. підказки -->
     <form
       v-if="!fetchError"
+      novalidate
       @submit.prevent="submit"
       class="space-y-3 bg-white p-4 rounded-2xl border border-slate-200"
     >
@@ -155,7 +161,7 @@ const submit = async () => {
         <input
           v-model="form.name"
           type="text"
-          required
+          aria-required="true"
           class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
         />
         <p v-if="fieldErrors.name" class="text-[11px] text-red-500">{{ fieldErrors.name }}</p>
@@ -174,8 +180,9 @@ const submit = async () => {
         <label class="text-xs text-muted">Сайт або лінк</label>
         <input
           v-model="form.website"
-          type="url"
-          placeholder="https://..."
+          type="text"
+          inputmode="url"
+          placeholder="https://company.com"
           class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
         />
         <p v-if="fieldErrors.website" class="text-[11px] text-red-500">{{ fieldErrors.website }}</p>
@@ -211,7 +218,6 @@ const submit = async () => {
       </div>
 
       <div class="pt-1">
-        <!-- 1) Кнопка видима тільки коли є зміни -->
         <button
           v-if="hasChanges && !saved"
           type="submit"
@@ -221,15 +227,12 @@ const submit = async () => {
           {{ saving ? 'Збереження...' : 'Зберегти' }}
         </button>
 
-        <!-- 2) Повідомлення про успіх на місці кнопки -->
         <div
           v-else-if="saved"
           class="w-full text-sm px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 font-medium text-center border border-emerald-200"
         >
           Збережено ✓
         </div>
-
-        <!-- Якщо змін немає — нічого не показуємо -->
       </div>
     </form>
   </section>

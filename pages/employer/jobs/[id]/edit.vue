@@ -53,11 +53,7 @@ const validate = () => {
     ok = false
   }
 
-  // теги — опційно, але якщо є, не даємо надто довгі елементи
-  const tagArr = form.tags
-    .split(',')
-    .map(t => t.trim())
-    .filter(Boolean)
+  const tagArr = form.tags.split(',').map(t => t.trim()).filter(Boolean)
   if (tagArr.some(t => t.length > 24)) {
     fieldErrors.tags = 'Окремий тег не має перевищувати 24 символи'
     ok = false
@@ -95,10 +91,7 @@ const submit = async () => {
       method: 'PUT',
       body: {
         ...form,
-        tags: form.tags
-          .split(',')
-          .map(t => t.trim())
-          .filter(Boolean)
+        tags: form.tags.split(',').map(t => t.trim()).filter(Boolean)
       }
     })
     await navigateTo('/employer/jobs')
@@ -121,8 +114,10 @@ const submit = async () => {
       {{ error }}
     </div>
 
+    <!-- novalidate -->
     <form
       v-if="!fetchError"
+      novalidate
       @submit.prevent="submit"
       class="space-y-3 bg-white p-4 rounded-2xl border border-slate-200"
     >
@@ -131,7 +126,7 @@ const submit = async () => {
         <input
           v-model="form.title"
           type="text"
-          required
+          aria-required="true"
           class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
         />
         <p v-if="fieldErrors.title" class="text-[11px] text-red-500">{{ fieldErrors.title }}</p>
@@ -195,29 +190,20 @@ const submit = async () => {
 
       <div class="space-y-1">
         <label class="text-xs text-muted">Опис</label>
-        <textarea
-          v-model="form.description"
-          rows="3"
-          class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
-        />
+        <textarea v-model="form.description" rows="3"
+          class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent" />
       </div>
 
       <div class="space-y-1">
         <label class="text-xs text-muted">Вимоги</label>
-        <textarea
-          v-model="form.requirements"
-          rows="3"
-          class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
-        />
+        <textarea v-model="form.requirements" rows="3"
+          class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent" />
       </div>
 
       <div class="space-y-1">
         <label class="text-xs text-muted">Умови</label>
-        <textarea
-          v-model="form.conditions"
-          rows="3"
-          class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
-        />
+        <textarea v-model="form.conditions" rows="3"
+          class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent" />
       </div>
 
       <div class="space-y-1">
