@@ -13,7 +13,7 @@ const removeJob = async (id: string) => {
     <div class="flex items-center justify-between">
       <h1 class="text-lg font-semibold text-primary">Мої вакансії</h1>
       <NuxtLink
-        to="/employer/jobs/create"
+        to="/employer/job-create"
         class="text-xs px-3 py-2 rounded-xl bg-accent text-white hover:opacity-90"
       >
         Створити вакансію

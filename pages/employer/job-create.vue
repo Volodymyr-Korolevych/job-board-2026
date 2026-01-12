@@ -1,7 +1,7 @@
 <script setup lang="ts">
-definePageMeta({
-  path: '/employer/jobs/create'
-})
+//definePageMeta({
+  // path: '/employer/jobs/create'
+//})
 
 const form = reactive({
   title: '',
