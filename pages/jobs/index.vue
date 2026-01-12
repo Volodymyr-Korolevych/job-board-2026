@@ -2,6 +2,7 @@
 definePageMeta({
   middleware: () => {}
 })
+await navigateTo('/')
 </script>
 
 <template>
