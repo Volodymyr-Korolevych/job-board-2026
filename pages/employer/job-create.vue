@@ -1,8 +1,4 @@
 <script setup lang="ts">
-//definePageMeta({
-  // path: '/employer/jobs/create'
-//})
-
 const form = reactive({
   title: '',
   city: '',
@@ -20,14 +16,65 @@ const form = reactive({
 const error = ref<string | null>(null)
 const saving = ref(false)
 
+const fieldErrors = reactive<Record<string, string>>({
+  title: '',
+  salary: '',
+  tags: ''
+})
+
+const clearFieldErrors = () => {
+  fieldErrors.title = ''
+  fieldErrors.salary = ''
+  fieldErrors.tags = ''
+}
+
+const validate = () => {
+  clearFieldErrors()
+  let ok = true
+
+  if (!form.title.trim()) {
+    fieldErrors.title = 'Вкажіть назву посади'
+    ok = false
+  }
+
+  if (form.salaryFrom !== null && form.salaryFrom < 0) {
+    fieldErrors.salary = 'Зарплата "від" не може бути відʼємною'
+    ok = false
+  }
+  if (form.salaryTo !== null && form.salaryTo < 0) {
+    fieldErrors.salary = 'Зарплата "до" не може бути відʼємною'
+    ok = false
+  }
+  if (form.salaryFrom !== null && form.salaryTo !== null && form.salaryFrom > form.salaryTo) {
+    fieldErrors.salary = 'Зарплата "від" не може бути більшою за "до"'
+    ok = false
+  }
+
+  const tagArr = form.tags
+    .split(',')
+    .map(t => t.trim())
+    .filter(Boolean)
+  if (tagArr.some(t => t.length > 24)) {
+    fieldErrors.tags = 'Окремий тег не має перевищувати 24 символи'
+    ok = false
+  }
+
+  return ok
+}
+
 const submit = async () => {
   error.value = null
+  if (!validate()) {
+    error.value = 'Перевірте поля форми'
+    return
+  }
+
   saving.value = true
   try {
     await $fetch('/api/jobs', {
       method: 'POST',
-      body: { 
-        ...form, 
+      body: {
+        ...form,
         tags: form.tags
           .split(',')
           .map(t => t.trim())
@@ -36,7 +83,7 @@ const submit = async () => {
     })
     await navigateTo('/employer/jobs')
   } catch (e: any) {
-    error.value = e?.data?.statusMessage || 'Помилка створення вакансії'
+    error.value = e?.data?.statusMessage || 'Не вдалося створити вакансію'
   } finally {
     saving.value = false
   }
@@ -63,6 +110,7 @@ const submit = async () => {
           required
           class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
         />
+        <p v-if="fieldErrors.title" class="text-[11px] text-red-500">{{ fieldErrors.title }}</p>
       </div>
 
       <div class="space-y-1">
@@ -119,6 +167,7 @@ const submit = async () => {
           />
         </div>
       </div>
+      <p v-if="fieldErrors.salary" class="text-[11px] text-red-500">{{ fieldErrors.salary }}</p>
 
       <div class="space-y-1">
         <label class="text-xs text-muted">Опис</label>
@@ -155,6 +204,7 @@ const submit = async () => {
           placeholder="Frontend, Junior, Remote"
           class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
         />
+        <p v-if="fieldErrors.tags" class="text-[11px] text-red-500">{{ fieldErrors.tags }}</p>
       </div>
 
       <button
