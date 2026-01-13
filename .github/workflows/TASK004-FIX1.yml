@@ -1,0 +1,277 @@
+name: TASK004-FIX1 - Restore layout + extract header + add pages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  task004_fix1:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply TASK004-FIX1 changes
+        run: |
+          mkdir -p layouts components pages
+
+          # -----------------------------
+          # components/AppHeader.vue
+          # (витягнуто з твого старого layouts/default.vue + додано "Правила використання")
+          # -----------------------------
+          cat <<'EOF' > components/AppHeader.vue
+          <script setup lang="ts">
+          const user = useAuthUser()
+          const { data } = await useFetch('/api/auth/me')
+          if (data.value?.user) {
+            user.value = data.value.user
+          }
+
+          const logout = async () => {
+            await $fetch('/api/auth/logout', { method: 'POST' })
+            user.value = null
+            await navigateTo('/')
+          }
+          </script>
+
+          <template>
+            <header class="border-b border-slate-200 bg-white">
+              <nav class="mx-auto max-w-5xl flex items-center justify-between px-4 py-3">
+                <NuxtLink to="/" class="text-lg font-semibold tracking-tight text-primary">
+                  JobBoard-2026
+                </NuxtLink>
+
+                <div class="flex items-center gap-4 text-sm">
+                  <NuxtLink to="/jobs" class="hover:text-accent">Вакансії</NuxtLink>
+                  <NuxtLink to="/rules" class="hover:text-accent">Правила використання</NuxtLink>
+
+                  <template v-if="user?.role === 'seeker'">
+                    <NuxtLink to="/profile" class="hover:text-accent">Профіль</NuxtLink>
+                    <NuxtLink to="/profile/favorites" class="hover:text-accent">Обране</NuxtLink>
+                  </template>
+
+                  <template v-if="user?.role === 'employer'">
+                    <NuxtLink to="/employer/company" class="hover:text-accent">
+                      Компанія
+                    </NuxtLink>
+                    <NuxtLink to="/employer/jobs" class="hover:text-accent">
+                      Мої вакансії
+                    </NuxtLink>
+                  </template>
+
+                  <template v-if="!user">
+                    <NuxtLink
+                      to="/auth/login"
+                      class="px-3 py-1 rounded-full border border-slate-300 hover:border-accent"
+                    >
+                      Увійти
+                    </NuxtLink>
+                  </template>
+
+                  <template v-else>
+                    <span class="text-xs text-muted">
+                      {{ user.email }} ({{ user.role }})
+                    </span>
+                    <button
+                      @click="logout"
+                      class="px-3 py-1 rounded-full border border-slate-300 hover:border-accent"
+                    >
+                      Вийти
+                    </button>
+                  </template>
+                </div>
+              </nav>
+            </header>
+          </template>
+          EOF
+
+          # -----------------------------
+          # layouts/default.vue
+          # (твій старий layout, але хедер винесено в <AppHeader />)
+          # -----------------------------
+          cat <<'EOF' > layouts/default.vue
+          <template>
+            <div class="min-h-screen flex flex-col bg-slate-50">
+              <AppHeader />
+
+              <main class="flex-1 mx-auto max-w-5xl w-full px-4 py-6">
+                <NuxtPage />
+              </main>
+
+              <footer class="border-t border-slate-200 bg-white">
+                <div class="mx-auto max-w-5xl px-4 py-4 text-xs text-slate-500 flex justify-between">
+                  <span>© 2026 JobBoard-2026</span>
+                  <div class="flex gap-4">
+                    <NuxtLink to="/about" class="hover:text-accent">Про нас</NuxtLink>
+                    <NuxtLink to="/contacts" class="hover:text-accent">Контакти</NuxtLink>
+                  </div>
+                </div>
+              </footer>
+            </div>
+          </template>
+          EOF
+
+          # -----------------------------
+          # pages/about.vue (текст з документа)
+          # -----------------------------
+          cat <<'EOF' > pages/about.vue
+          <script setup lang="ts">
+          definePageMeta({ title: 'Про нас' })
+          </script>
+
+          <template>
+            <section class="max-w-3xl space-y-6">
+              <h1 class="text-xl font-semibold text-primary">Про нас</h1>
+
+              <div class="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+                <p class="text-sm leading-6">
+                  JobBoard-2026 — це сервіс пошуку роботи в Україні. Працедавці України розміщують свої вакансії та знаходять
+                  співробітників за допомогою нашого сервісу. Ми робимо все, щоб кожному відвідувачу JobBoard-2026 запам’ятався
+                  як зручний, швидкий та ефективний сервіс з працевлаштування.
+                </p>
+
+                <h2 class="text-base font-semibold text-primary">Наші цінності</h2>
+
+                <div class="space-y-3">
+                  <div>
+                    <h3 class="text-sm font-semibold">Допомагати людям</h3>
+                    <p class="text-sm leading-6 text-slate-700">
+                      Ми допомагаємо знайти роботу та співробітників. Однак бажання допомогти не обмежується лише цим.
+                      Ми намагаємося допомогти нашим клієнтам, намагаємося розв’язувати проблеми, з якими зіштовхуються користувачі.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 class="text-sm font-semibold">Просто та зрозуміло</h3>
+                    <p class="text-sm leading-6 text-slate-700">
+                      Все, що ми робимо, має бути максимально простим та зрозумілим. Ми уникаємо умов «якщо».
+                      Складні правила паралізують, складні інтерфейси дратують, складні проєкти важко підтримувати.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 class="text-sm font-semibold">Чесність в усьому</h3>
+                    <p class="text-sm leading-6 text-slate-700">
+                      Чесність — обов’язкова умова роботи JobBoard-2026. Ми робимо те, про що можна сміливо розповідати кому завгодно,
+                      ми не даємо пустих обіцянок.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </template>
+          EOF
+
+          # -----------------------------
+          # pages/contacts.vue (текст з документа)
+          # -----------------------------
+          cat <<'EOF' > pages/contacts.vue
+          <script setup lang="ts">
+          definePageMeta({ title: 'Контакти' })
+          </script>
+
+          <template>
+            <section class="max-w-3xl space-y-6">
+              <h1 class="text-xl font-semibold text-primary">Контакти</h1>
+
+              <div class="bg-white border border-slate-200 rounded-2xl p-5 space-y-6">
+                <div class="space-y-2">
+                  <h2 class="text-base font-semibold text-primary">Телефони</h2>
+
+                  <div class="grid sm:grid-cols-3 gap-3 text-sm">
+                    <div class="rounded-xl border border-slate-200 p-3">
+                      <div class="text-xs text-slate-500">Vodafone</div>
+                      <div class="font-medium">050 361-02-35</div>
+                    </div>
+                    <div class="rounded-xl border border-slate-200 p-3">
+                      <div class="text-xs text-slate-500">Київстар</div>
+                      <div class="font-medium">067 630-30-84</div>
+                    </div>
+                    <div class="rounded-xl border border-slate-200 p-3">
+                      <div class="text-xs text-slate-500">Lifecell</div>
+                      <div class="font-medium">093 966-15-22</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="space-y-2">
+                  <h2 class="text-base font-semibold text-primary">Електронна пошта</h2>
+
+                  <div class="grid sm:grid-cols-2 gap-3 text-sm">
+                    <div class="rounded-xl border border-slate-200 p-3">
+                      <div class="text-xs text-slate-500">Служба підтримки</div>
+                      <a class="font-medium hover:text-accent" href="mailto:support@JobBoard.ua">support@JobBoard.ua</a>
+                    </div>
+                    <div class="rounded-xl border border-slate-200 p-3">
+                      <div class="text-xs text-slate-500">Послуги для роботодавців</div>
+                      <a class="font-medium hover:text-accent" href="mailto:sales@JobBoard.ua">sales@JobBoard.ua</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </template>
+          EOF
+
+          # -----------------------------
+          # pages/rules.vue (текст придуманий)
+          # -----------------------------
+          cat <<'EOF' > pages/rules.vue
+          <script setup lang="ts">
+          definePageMeta({ title: 'Правила використання' })
+          </script>
+
+          <template>
+            <section class="max-w-3xl space-y-6">
+              <h1 class="text-xl font-semibold text-primary">Правила використання</h1>
+
+              <div class="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 text-sm leading-6">
+                <p>
+                  Використовуючи JobBoard-2026, ви погоджуєтесь із правилами нижче. Це навчальний проєкт, але ми дотримуємось принципів
+                  прозорості та безпечної взаємодії між пошукачами й роботодавцями.
+                </p>
+
+                <h2 class="text-base font-semibold text-primary">1) Достовірність інформації</h2>
+                <ul class="list-disc pl-5 space-y-1 text-slate-700">
+                  <li>Не публікуйте неправдиві вакансії або дані у профілі.</li>
+                  <li>Не використовуйте сервіс для спаму чи шахрайства.</li>
+                </ul>
+
+                <h2 class="text-base font-semibold text-primary">2) Повага і недискримінація</h2>
+                <ul class="list-disc pl-5 space-y-1 text-slate-700">
+                  <li>Оголошення й відгуки мають бути коректними та без образ.</li>
+                  <li>Заборонені дискримінаційні формулювання.</li>
+                </ul>
+
+                <h2 class="text-base font-semibold text-primary">3) Персональні дані</h2>
+                <ul class="list-disc pl-5 space-y-1 text-slate-700">
+                  <li>Не публікуйте персональні дані третіх осіб без їхньої згоди.</li>
+                  <li>Дані профілю використовуйте лише з метою працевлаштування.</li>
+                </ul>
+
+                <h2 class="text-base font-semibold text-primary">4) Відповідальність</h2>
+                <ul class="list-disc pl-5 space-y-1 text-slate-700">
+                  <li>JobBoard-2026 не гарантує працевлаштування та не відповідає за рішення сторін.</li>
+                  <li>Сервіс може тимчасово бути недоступним під час технічних робіт.</li>
+                </ul>
+
+                <div class="rounded-xl bg-slate-50 border border-slate-200 p-4 text-slate-700">
+                  Якщо бачите порушення — напишіть у підтримку: <b>support@JobBoard.ua</b>
+                </div>
+              </div>
+            </section>
+          </template>
+          EOF
+
+      - name: Commit and push TASK004-FIX1
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add layouts/default.vue components/AppHeader.vue pages/about.vue pages/contacts.vue pages/rules.vue
+          git commit -m "TASK004-FIX1: restore layout, extract header, add about/contacts/rules pages" || echo "No changes to commit"
+          git push
