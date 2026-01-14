@@ -1,4 +1,5 @@
 <script setup lang="ts">
+
 const user = useAuthUser()
 const { data } = await useFetch('/api/auth/me')
 if (data.value?.user) {
@@ -48,7 +49,7 @@ const logout = async () => {
 
         <template v-else>
           <span class="text-xs text-muted">
-            {{ user.email }} ({{ user.role }})
+            {{ user.email }}
           </span>
           <button
             @click="logout"

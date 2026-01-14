@@ -20,7 +20,7 @@ const clearFieldErrors = () => {
 const form = reactive({
   title: '',
   city: '',
-  workFormat: 'office',
+  workFormat: 'офіс',
   employmentType: 'full-time',
   salaryFrom: null as number | null,
   salaryTo: null as number | null,
@@ -89,7 +89,7 @@ const { data, error: fetchError } = await useFetch(`/api/jobs/${id}`)
 if (data.value) {
   form.title = data.value.title || ''
   form.city = data.value.city || ''
-  form.workFormat = data.value.workFormat || 'office'
+  form.workFormat = data.value.workFormat || 'офіс'
   form.employmentType = data.value.employmentType || 'full-time'
   form.salaryFrom = data.value.salaryFrom ?? null
   form.salaryTo = data.value.salaryTo ?? null
@@ -172,9 +172,10 @@ const submit = async () => {
             v-model="form.workFormat"
             class="w-full px-3 py-2 border rounded-xl outline-none focus:border-accent text-xs"
           >
-            <option value="office">Офіс</option>
-            <option value="remote">Remote</option>
-            <option value="hybrid">Hybrid</option>
+           <option value="офіс">Офіс</option>
+            <option value="дистанційно">Дистанційно</option>
+            <option value="офіс/дистанційно">Офіс/дистанційно</option>
+            <option value="виробництво">Виробництво</option>
           </select>
         </div>
         <div class="space-y-1">

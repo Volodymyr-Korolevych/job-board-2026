@@ -2,7 +2,7 @@
 const form = reactive({
   title: '',
   city: '',
-  workFormat: 'office',
+  workFormat: 'офіс',
   employmentType: 'full-time',
   salaryFrom: null as number | null,
   salaryTo: null as number | null,
@@ -149,9 +149,10 @@ const submit = async () => {
             v-model="form.workFormat"
             class="w-full px-3 py-2 border rounded-xl outline-none focus:border-accent text-xs"
           >
-            <option value="office">Офіс</option>
-            <option value="remote">Remote</option>
-            <option value="hybrid">Hybrid</option>
+            <option value="офіс">Офіс</option>
+            <option value="дистанційно">Дистанційно</option>
+            <option value="офіс/дистанційно">Офіс/дистанційно</option>
+            <option value="виробництво">Виробництво</option>
           </select>
         </div>
         <div class="space-y-1">

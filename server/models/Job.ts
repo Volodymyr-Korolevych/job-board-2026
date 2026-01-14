@@ -6,7 +6,7 @@ const JobSchema = new Schema({
 
   title: { type: String, required: true },
   city: String,
-  workFormat: { type: String, enum: ['office', 'remote', 'hybrid'], default: 'office' },
+  workFormat: { type: String, enum: ['офіс', 'дистанційно', 'офіс/дистанційно', 'виробництво'], default: 'офіс' },
   employmentType: { type: String, enum: ['full-time', 'part-time', 'freelance'], default: 'full-time' },
 
   salaryFrom: Number,

@@ -33,7 +33,7 @@ export default defineEventHandler(async () => {
     employerId: employer._id,
     title: 'Junior Frontend Developer',
     city: 'Львів',
-    workFormat: 'remote',
+    workFormat: 'дистанційно',
     employmentType: 'full-time',
     salaryFrom: 20000,
     salaryTo: 30000,

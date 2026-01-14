@@ -16,7 +16,7 @@ const search = async () => {
     <div>
       <h1 class="text-2xl font-semibold text-primary">Знайди роботу своєї мрії</h1>
       <p class="text-sm text-muted mt-1">
-        Мінімалістичний job-board для пошуку роботи та працівників.
+        Job-board для пошуку роботи та працівників.
       </p>
     </div>
 
@@ -45,7 +45,7 @@ const search = async () => {
 
     <div class="space-y-3">
       <div v-if="!jobs?.length" class="text-sm text-muted">
-        Вакансій поки немає.
+        За введеними критеріями для пошуку вакансій поки немає
       </div>
 
       <article
