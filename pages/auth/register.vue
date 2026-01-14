@@ -3,6 +3,7 @@ const email = ref('')
 const password = ref('')
 const role = ref<'seeker' | 'employer'>('seeker')
 const error = ref<string | null>(null)
+const submitting = ref(false)
 const user = useAuthUser()
 
 // Профіль пошукача
@@ -24,11 +25,100 @@ const companyProfile = reactive({
   staffCount: null as number | null
 })
 
+const fieldErrors = reactive<Record<string, string>>({
+  email: '',
+  password: '',
+  fullName: '',
+  companyName: '',
+  cvLink: '',
+  website: '',
+  staffCount: ''
+})
+
+const clearFieldErrors = () => {
+  for (const k of Object.keys(fieldErrors)) fieldErrors[k] = ''
+}
+
+const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
+const isHttpUrl = (v: string) => /^https?:\/\/.+/i.test(v.trim())
+
+const mapAuthError = (e: any): string => {
+  const status = e?.statusCode || e?.data?.statusCode || e?.response?.status
+  const msg = String(e?.data?.statusMessage || e?.data?.message || e?.message || '').toLowerCase()
+
+  if (status === 409) return 'Користувач з таким email вже існує'
+  if (status === 400) return 'Перевірте поля реєстрації'
+  if (status === 429) return 'Забагато спроб. Спробуйте пізніше'
+  if (msg.includes('duplicate') || msg.includes('already') || msg.includes('exists')) return 'Користувач з таким email вже існує'
+  if (msg.includes('invalid') && msg.includes('email')) return 'Вкажіть коректний email'
+  if (msg.includes('password') && (msg.includes('short') || msg.includes('min'))) return 'Пароль занадто короткий'
+  if (msg.includes('fetch') || msg.includes('network') || msg.includes('ecconn') || msg.includes('failed to fetch')) {
+    return 'Помилка мережі. Перевірте інтернет і спробуйте ще раз'
+  }
+  return e?.data?.statusMessage || 'Не вдалося зареєструватися. Спробуйте ще раз'
+}
+
+const validate = () => {
+  clearFieldErrors()
+  let ok = true
+
+  if (!email.value.trim()) {
+    fieldErrors.email = 'Вкажіть email'
+    ok = false
+  } else if (!isEmail(email.value)) {
+    fieldErrors.email = 'Email має бути коректним (наприклад, name@gmail.com)'
+    ok = false
+  }
+
+  if (!password.value) {
+    fieldErrors.password = 'Вкажіть пароль'
+    ok = false
+  } else if (password.value.length < 6) {
+    fieldErrors.password = 'Пароль має містити щонайменше 6 символів'
+    ok = false
+  }
+
+  if (role.value === 'seeker') {
+    if (!seekerProfile.fullName.trim()) {
+      fieldErrors.fullName = "Вкажіть повне ім'я"
+      ok = false
+    }
+    if (seekerProfile.cvLink && !isHttpUrl(seekerProfile.cvLink)) {
+      fieldErrors.cvLink = 'Лінк на CV має починатися з http:// або https://'
+      ok = false
+    }
+  } else {
+    if (!companyProfile.name.trim()) {
+      fieldErrors.companyName = 'Вкажіть назву компанії'
+      ok = false
+    }
+    if (companyProfile.website && !isHttpUrl(companyProfile.website)) {
+      fieldErrors.website = 'Сайт має починатися з http:// або https://'
+      ok = false
+    }
+    if (companyProfile.staffCount !== null) {
+      const n = Number(companyProfile.staffCount)
+      if (Number.isNaN(n) || n < 1) {
+        fieldErrors.staffCount = 'Кількість співробітників має бути числом від 1'
+        ok = false
+      }
+    }
+  }
+
+  return ok
+}
+
 const submit = async () => {
   error.value = null
+  if (!validate()) {
+    error.value = 'Перевірте поля форми'
+    return
+  }
+
+  submitting.value = true
   try {
     const body: any = {
-      email: email.value,
+      email: email.value.trim(),
       password: password.value,
       role: role.value
     }
@@ -52,18 +142,12 @@ const submit = async () => {
       })
     }
 
-    await $fetch('/api/auth/register', {
-      method: 'POST',
-      body
-    })
+    await $fetch('/api/auth/register', { method: 'POST', body })
 
     // Автоматичний логін після реєстрації
     const loginRes: any = await $fetch('/api/auth/login', {
       method: 'POST',
-      body: {
-        email: email.value,
-        password: password.value
-      }
+      body: { email: email.value.trim(), password: password.value }
     })
 
     user.value = loginRes.user
@@ -74,22 +158,23 @@ const submit = async () => {
       await navigateTo('/employer/company')
     }
   } catch (e: any) {
-    error.value = e?.data?.statusMessage || 'Помилка реєстрації'
+    error.value = mapAuthError(e)
+  } finally {
+    submitting.value = false
   }
 }
 </script>
 
 <template>
-  <section
-    class="max-w-xl mx-auto bg-white p-6 rounded-2xl border border-slate-200 space-y-4"
-  >
+  <section class="max-w-xl mx-auto bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
     <h1 class="text-lg font-semibold text-primary">Реєстрація</h1>
 
     <div v-if="error" class="text-xs text-red-500">
       {{ error }}
     </div>
 
-    <form @submit.prevent="submit" class="space-y-4">
+    <!-- novalidate: вимикає браузерні англомовні підказки -->
+    <form novalidate @submit.prevent="submit" class="space-y-4">
       <div class="space-y-1">
         <label class="text-xs text-muted">Роль</label>
         <div class="flex gap-2 text-xs">
@@ -121,19 +206,23 @@ const submit = async () => {
           <label class="text-xs text-muted">Email</label>
           <input
             v-model="email"
-            type="email"
-            required
+            type="text"
+            inputmode="email"
+            autocomplete="email"
             class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
           />
+          <p v-if="fieldErrors.email" class="text-[11px] text-red-500">{{ fieldErrors.email }}</p>
         </div>
+
         <div class="space-y-1">
           <label class="text-xs text-muted">Пароль</label>
           <input
             v-model="password"
             type="password"
-            required
+            autocomplete="new-password"
             class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
           />
+          <p v-if="fieldErrors.password" class="text-[11px] text-red-500">{{ fieldErrors.password }}</p>
         </div>
       </div>
 
@@ -146,9 +235,9 @@ const submit = async () => {
           <input
             v-model="seekerProfile.fullName"
             type="text"
-            required
             class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
           />
+          <p v-if="fieldErrors.fullName" class="text-[11px] text-red-500">{{ fieldErrors.fullName }}</p>
         </div>
 
         <div class="space-y-1">
@@ -181,13 +270,17 @@ const submit = async () => {
               <option value="senior">Senior</option>
             </select>
           </div>
+
           <div class="space-y-1">
             <label class="text-xs text-muted">Лінк на CV</label>
             <input
               v-model="seekerProfile.cvLink"
-              type="url"
+              type="text"
+              inputmode="url"
+              placeholder="https://..."
               class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
             />
+            <p v-if="fieldErrors.cvLink" class="text-[11px] text-red-500">{{ fieldErrors.cvLink }}</p>
           </div>
         </div>
       </div>
@@ -201,9 +294,9 @@ const submit = async () => {
           <input
             v-model="companyProfile.name"
             type="text"
-            required
             class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
           />
+          <p v-if="fieldErrors.companyName" class="text-[11px] text-red-500">{{ fieldErrors.companyName }}</p>
         </div>
 
         <div class="space-y-1">
@@ -219,9 +312,12 @@ const submit = async () => {
           <label class="text-xs text-muted">Сайт або лінк</label>
           <input
             v-model="companyProfile.website"
-            type="url"
+            type="text"
+            inputmode="url"
+            placeholder="https://company.com"
             class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
           />
+          <p v-if="fieldErrors.website" class="text-[11px] text-red-500">{{ fieldErrors.website }}</p>
         </div>
 
         <div class="space-y-1">
@@ -232,13 +328,36 @@ const submit = async () => {
             class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
           />
         </div>
+
+        <div class="grid md:grid-cols-2 gap-3">
+          <div class="space-y-1">
+            <label class="text-xs text-muted">Сфера діяльності</label>
+            <input
+              v-model="companyProfile.industry"
+              type="text"
+              class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label class="text-xs text-muted">К-сть співробітників (опційно)</label>
+            <input
+              v-model.number="companyProfile.staffCount"
+              type="number"
+              min="1"
+              class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+            />
+            <p v-if="fieldErrors.staffCount" class="text-[11px] text-red-500">{{ fieldErrors.staffCount }}</p>
+          </div>
+        </div>
       </div>
 
       <button
         type="submit"
-        class="w-full text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90"
+        :disabled="submitting"
+        class="w-full text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90 disabled:opacity-60"
       >
-        Зареєструватися
+        {{ submitting ? 'Реєстрація...' : 'Зареєструватися' }}
       </button>
     </form>
 
