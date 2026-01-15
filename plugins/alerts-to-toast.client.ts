@@ -1,7 +1,6 @@
 /**
- * TASK006
- * Перехоплює window.alert і показує toast-повідомлення замість браузерного alert().
- * Працює тільки на клієнті (client plugin).
+ * TASK006-FIX1
+ * Яскраві, помітні toast-повідомлення замість alert()
  */
 
 type ToastType = 'info' | 'success' | 'warning' | 'error'
@@ -24,38 +23,43 @@ function ensureStyles() {
   style.textContent = `
     .jb-toast-root{
       position: fixed;
-      right: 16px;
-      bottom: 16px;
+      left: 50%;
+      bottom: 30%;
+      transform: translateX(-50%);
       z-index: 9999;
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      max-width: min(420px, calc(100vw - 32px));
+      gap: 14px;
+      max-width: min(520px, calc(100vw - 32px));
       pointer-events: none;
     }
+
     .jb-toast{
       pointer-events: auto;
       display: grid;
-      grid-template-columns: 10px 1fr auto;
+      grid-template-columns: 12px 1fr auto;
       align-items: start;
-      gap: 10px;
-      padding: 12px 12px;
-      border-radius: 16px;
-      border: 1px solid rgba(148,163,184,.55);
-      background: rgba(255,255,255,.92);
-      backdrop-filter: blur(10px);
-      box-shadow: 0 10px 30px rgba(2,6,23,.12);
-      transform: translateY(8px);
+      gap: 12px;
+      padding: 18px 18px;
+      border-radius: 20px;
+      border: 2px solid rgba(148,163,184,.55);
+      background: linear-gradient(135deg, #f8fafc, #eef2ff);
+      box-shadow: 0 20px 50px rgba(2,6,23,.25);
+      transform: translateY(16px) scale(.96);
       opacity: 0;
-      transition: transform .18s ease, opacity .18s ease;
+      transition: transform .22s ease, opacity .22s ease;
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
     }
-    .jb-toast--show{ transform: translateY(0); opacity: 1; }
+    .jb-toast--show{
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
+
     .jb-toast__bar{
-      width: 10px;
-      height: 10px;
+      width: 12px;
+      height: 12px;
       border-radius: 999px;
-      margin-top: 4px;
+      margin-top: 6px;
       background: #2563eb; /* info */
     }
     .jb-toast[data-type="success"] .jb-toast__bar{ background: #16a34a; }
@@ -63,36 +67,38 @@ function ensureStyles() {
     .jb-toast[data-type="error"]   .jb-toast__bar{ background: #ef4444; }
 
     .jb-toast__msg{
-      font-size: 13px;
-      line-height: 1.35;
+      font-size: 16px;
+      line-height: 1.45;
       color: #0f172a;
       margin: 0;
       white-space: pre-wrap;
       word-break: break-word;
+      font-weight: 500;
     }
+
     .jb-toast__close{
       border: 0;
-      background: transparent;
-      color: #475569;
-      font-size: 16px;
+      background: rgba(148,163,184,.25);
+      color: #0f172a;
+      font-size: 18px;
       line-height: 1;
       cursor: pointer;
-      padding: 2px 6px;
-      border-radius: 10px;
+      padding: 4px 10px;
+      border-radius: 999px;
     }
     .jb-toast__close:hover{
-      background: rgba(148,163,184,.25);
+      background: rgba(148,163,184,.45);
     }
 
     @media (prefers-color-scheme: dark){
       .jb-toast{
-        background: rgba(15,23,42,.86);
-        border-color: rgba(148,163,184,.22);
-        box-shadow: 0 10px 30px rgba(0,0,0,.35);
+        background: linear-gradient(135deg, #020617, #020617);
+        border-color: rgba(148,163,184,.35);
+        box-shadow: 0 20px 60px rgba(0,0,0,.6);
       }
-      .jb-toast__msg{ color: #e2e8f0; }
-      .jb-toast__close{ color: #cbd5e1; }
-      .jb-toast__close:hover{ background: rgba(148,163,184,.18); }
+      .jb-toast__msg{ color: #e5e7eb; }
+      .jb-toast__close{ color: #e5e7eb; background: rgba(148,163,184,.2); }
+      .jb-toast__close:hover{ background: rgba(148,163,184,.35); }
     }
   `
   document.head.appendChild(style)
@@ -111,7 +117,7 @@ function ensureRoot(): HTMLDivElement {
   return root
 }
 
-function showToast(message: string, type: ToastType = 'info', ms = 2600) {
+function showToast(message: string, type: ToastType = 'info', ms = 5000) {
   const root = ensureRoot()
 
   const toast = document.createElement('div')
@@ -127,9 +133,7 @@ function showToast(message: string, type: ToastType = 'info', ms = 2600) {
   const closeBtn = toast.querySelector('.jb-toast__close') as HTMLButtonElement
   const remove = () => {
     toast.classList.remove('jb-toast--show')
-    window.setTimeout(() => {
-      toast.remove()
-    }, 180)
+    window.setTimeout(() => toast.remove(), 220)
   }
 
   closeBtn.addEventListener('click', remove)
@@ -141,25 +145,26 @@ function showToast(message: string, type: ToastType = 'info', ms = 2600) {
 }
 
 export default defineNuxtPlugin(() => {
-  // Глобальна функція (можна використовувати в коді: window.notify("...", "success"))
-  ;(window as any).notify = (message: string, type: ToastType = 'info') => showToast(message, type)
+  ;(window as any).notify = (message: string, type: ToastType = 'info') =>
+    showToast(message, type)
 
-  // Перехоплюємо alert()
   const nativeAlert = window.alert.bind(window)
   window.alert = (message?: any) => {
-    // якщо хтось передає об'єкт — покажемо його як текст
     try {
-      showToast(typeof message === 'string' ? message : JSON.stringify(message), 'info')
+      showToast(
+        typeof message === 'string' ? message : JSON.stringify(message),
+        'info'
+      )
     } catch {
       showToast(String(message ?? ''), 'info')
     }
-    // nativeAlert(message) // НЕ викликаємо, щоб не блокував UI
+    // nativeAlert(message) // вимкнено навмисно
   }
 
-  // Додатково: короткий хелпер в Nuxt (для useNuxtApp().$notify)
   return {
     provide: {
-      notify: (message: string, type: ToastType = 'info') => showToast(message, type)
+      notify: (message: string, type: ToastType = 'info') =>
+        showToast(message, type)
     }
   }
 })
