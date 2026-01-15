@@ -242,7 +242,7 @@ const submit = async () => {
         />
       </div>
 
-      <div class="space-y-1">
+<!--       <div class="space-y-1">
         <label class="text-xs text-muted">Теги (через кому)</label>
         <input
           v-model="form.tags"
@@ -251,7 +251,7 @@ const submit = async () => {
           class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
         />
         <p v-if="fieldErrors.tags" class="text-[11px] text-red-500">{{ fieldErrors.tags }}</p>
-      </div>
+      </div> -->
 
       <div class="space-y-1">
         <label class="text-xs text-muted">Статус вакансії</label>
