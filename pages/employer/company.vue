@@ -6,6 +6,7 @@ const error = ref<string | null>(null)
 const form = reactive({
   name: '',
   city: '',
+  phone: '', // TASK007
   website: '',
   description: '',
   industry: '',
@@ -15,6 +16,7 @@ const form = reactive({
 const initial = ref({
   name: '',
   city: '',
+  phone: '', // TASK007
   website: '',
   description: '',
   industry: '',
@@ -23,17 +25,27 @@ const initial = ref({
 
 const fieldErrors = reactive<Record<string, string>>({
   name: '',
+  phone: '', // TASK007
   website: '',
   staffCount: ''
 })
 
 const clearFieldErrors = () => {
   fieldErrors.name = ''
+  fieldErrors.phone = ''
   fieldErrors.website = ''
   fieldErrors.staffCount = ''
 }
 
 const normalizeUrl = (url: string) => url.trim()
+
+const normalizePhone = (v: string) => v.trim()
+const isValidPhone = (v: string) => {
+  const s = normalizePhone(v)
+  if (!/^[+\d\s().-]+$/.test(s)) return false
+  const digits = s.replace(/\D/g, '')
+  return digits.length >= 10
+}
 
 const validate = () => {
   clearFieldErrors()
@@ -42,6 +54,13 @@ const validate = () => {
   if (!form.name.trim()) {
     fieldErrors.name = 'Вкажіть назву компанії'
     ok = false
+  }
+
+  if (form.phone) {
+    if (!isValidPhone(form.phone)) {
+      fieldErrors.phone = 'Вкажіть коректний номер телефону (мінімум 10 цифр)'
+      ok = false
+    }
   }
 
   if (form.website) {
@@ -69,6 +88,7 @@ const { data, error: fetchError } = await useFetch('/api/company')
 const applyFromServer = (src: any) => {
   form.name = src?.name || ''
   form.city = src?.city || ''
+  form.phone = src?.phone || ''
   form.website = src?.website || ''
   form.description = src?.description || ''
   form.industry = src?.industry || ''
@@ -77,6 +97,7 @@ const applyFromServer = (src: any) => {
   initial.value = {
     name: form.name,
     city: form.city,
+    phone: form.phone,
     website: form.website,
     description: form.description,
     industry: form.industry,
@@ -91,6 +112,7 @@ const hasChanges = computed(() => {
   return (
     form.name !== a.name ||
     form.city !== a.city ||
+    form.phone !== a.phone ||
     form.website !== a.website ||
     form.description !== a.description ||
     form.industry !== a.industry ||
@@ -149,7 +171,6 @@ const submit = async () => {
       {{ error }}
     </div>
 
-    <!-- novalidate: вимикає браузерні англ. підказки -->
     <form
       v-if="!fetchError"
       novalidate
@@ -167,13 +188,27 @@ const submit = async () => {
         <p v-if="fieldErrors.name" class="text-[11px] text-red-500">{{ fieldErrors.name }}</p>
       </div>
 
-      <div class="space-y-1">
-        <label class="text-xs text-muted">Місто</label>
-        <input
-          v-model="form.city"
-          type="text"
-          class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
-        />
+      <div class="grid sm:grid-cols-2 gap-3">
+        <div class="space-y-1">
+          <label class="text-xs text-muted">Місто</label>
+          <input
+            v-model="form.city"
+            type="text"
+            class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-xs text-muted">Контактний телефон (опційно)</label>
+          <input
+            v-model="form.phone"
+            type="text"
+            inputmode="tel"
+            placeholder="+380..."
+            class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+          />
+          <p v-if="fieldErrors.phone" class="text-[11px] text-red-500">{{ fieldErrors.phone }}</p>
+        </div>
       </div>
 
       <div class="space-y-1">

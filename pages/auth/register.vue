@@ -19,6 +19,7 @@ const seekerProfile = reactive({
 const companyProfile = reactive({
   name: '',
   city: '',
+  phone: '', // TASK007
   website: '',
   description: '',
   industry: '',
@@ -32,7 +33,8 @@ const fieldErrors = reactive<Record<string, string>>({
   companyName: '',
   cvLink: '',
   website: '',
-  staffCount: ''
+  staffCount: '',
+  phone: '' // TASK007
 })
 
 const clearFieldErrors = () => {
@@ -41,6 +43,15 @@ const clearFieldErrors = () => {
 
 const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
 const isHttpUrl = (v: string) => /^https?:\/\/.+/i.test(v.trim())
+
+// Телефон: дозволяємо +, цифри, пробіли, (), -, але перевіряємо що цифр >= 10
+const normalizePhone = (v: string) => v.trim()
+const isValidPhone = (v: string) => {
+  const s = normalizePhone(v)
+  if (!/^[+\d\s().-]+$/.test(s)) return false
+  const digits = s.replace(/\D/g, '')
+  return digits.length >= 10
+}
 
 const mapAuthError = (e: any): string => {
   const status = e?.statusCode || e?.data?.statusCode || e?.response?.status
@@ -52,7 +63,7 @@ const mapAuthError = (e: any): string => {
   if (msg.includes('duplicate') || msg.includes('already') || msg.includes('exists')) return 'Користувач з таким email вже існує'
   if (msg.includes('invalid') && msg.includes('email')) return 'Вкажіть коректний email'
   if (msg.includes('password') && (msg.includes('short') || msg.includes('min'))) return 'Пароль занадто короткий'
-  if (msg.includes('fetch') || msg.includes('network') || msg.includes('ecconn') || msg.includes('failed to fetch')) {
+  if (msg.includes('fetch') || msg.includes('network') || msg.includes('failed to fetch')) {
     return 'Помилка мережі. Перевірте інтернет і спробуйте ще раз'
   }
   return e?.data?.statusMessage || 'Не вдалося зареєструватися. Спробуйте ще раз'
@@ -92,6 +103,13 @@ const validate = () => {
       fieldErrors.companyName = 'Вкажіть назву компанії'
       ok = false
     }
+
+    // TASK007: телефон (не обов'язковий, але якщо введений — має бути коректним)
+    if (companyProfile.phone && !isValidPhone(companyProfile.phone)) {
+      fieldErrors.phone = 'Вкажіть коректний номер телефону (мінімум 10 цифр)'
+      ok = false
+    }
+
     if (companyProfile.website && !isHttpUrl(companyProfile.website)) {
       fieldErrors.website = 'Сайт має починатися з http:// або https://'
       ok = false
@@ -135,6 +153,7 @@ const submit = async () => {
       Object.assign(body, {
         companyName: companyProfile.name,
         companyCity: companyProfile.city,
+        companyPhone: companyProfile.phone.trim(), // TASK007
         companyWebsite: companyProfile.website,
         companyDescription: companyProfile.description,
         companyIndustry: companyProfile.industry,
@@ -173,7 +192,6 @@ const submit = async () => {
       {{ error }}
     </div>
 
-    <!-- novalidate: вимикає браузерні англомовні підказки -->
     <form novalidate @submit.prevent="submit" class="space-y-4">
       <div class="space-y-1">
         <label class="text-xs text-muted">Роль</label>
@@ -299,13 +317,27 @@ const submit = async () => {
           <p v-if="fieldErrors.companyName" class="text-[11px] text-red-500">{{ fieldErrors.companyName }}</p>
         </div>
 
-        <div class="space-y-1">
-          <label class="text-xs text-muted">Місто</label>
-          <input
-            v-model="companyProfile.city"
-            type="text"
-            class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
-          />
+        <div class="grid md:grid-cols-2 gap-3">
+          <div class="space-y-1">
+            <label class="text-xs text-muted">Місто</label>
+            <input
+              v-model="companyProfile.city"
+              type="text"
+              class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label class="text-xs text-muted">Контактний телефон (опційно)</label>
+            <input
+              v-model="companyProfile.phone"
+              type="text"
+              inputmode="tel"
+              placeholder="+380..."
+              class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+            />
+            <p v-if="fieldErrors.phone" class="text-[11px] text-red-500">{{ fieldErrors.phone }}</p>
+          </div>
         </div>
 
         <div class="space-y-1">
