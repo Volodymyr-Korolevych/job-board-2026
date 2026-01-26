@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const route = useRoute()
 const user = useAuthUser()
+const { $notify } = useNuxtApp()
 
 const { data: job } = await useFetch(`/api/jobs/${route.params.id}`)
 
@@ -11,7 +12,7 @@ const applyToJob = async () => {
     method: 'POST',
     body: { jobId: route.params.id, message: applyMessage.value }
   })
-  alert('Відгук відправлено')
+  $notify('Відгук відправлено', 'success')
   applyMessage.value = ''
 }
 
@@ -20,7 +21,7 @@ const toggleFavorite = async () => {
     method: 'POST',
     body: { jobId: route.params.id }
   })
-  alert('Додано в обране (або вже було)')
+  $notify('Додано в обране (або вже було)', 'info')
 }
 </script>
 
@@ -31,10 +32,19 @@ const toggleFavorite = async () => {
         <h1 class="text-2xl font-semibold text-primary">
           {{ job.title }}
         </h1>
+
         <p class="text-sm text-muted mt-1">
           {{ job.city || 'Місто не вказано' }} · {{ job.employmentType }} · {{ job.workFormat }}
         </p>
+
+        <!-- TASK008: компанія + телефон -->
+        <p v-if="job.companyName || job.companyPhone" class="text-sm text-slate-700 mt-1">
+          <span v-if="job.companyName" class="font-semibold">{{ job.companyName }}</span>
+          <span v-if="job.companyName && job.companyPhone"> · </span>
+          <span v-if="job.companyPhone">{{ job.companyPhone }}</span>
+        </p>
       </div>
+
       <div class="text-right text-sm text-primary font-medium">
         <span v-if="job.salaryFrom || job.salaryTo">
           {{ job.salaryFrom || '—' }}–{{ job.salaryTo || '—' }} ₴
@@ -68,10 +78,23 @@ const toggleFavorite = async () => {
       </div>
 
       <aside class="space-y-4">
+        <!-- Карточка компанії -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 space-y-2">
+          <h3 class="text-sm font-semibold text-primary">Компанія</h3>
+          <p v-if="job.companyName" class="text-sm text-slate-700">
+            {{ job.companyName }}
+          </p>
+          <p v-if="job.companyPhone" class="text-sm text-slate-700">
+            Телефон: <span class="font-medium">{{ job.companyPhone }}</span>
+          </p>
+          <p v-if="!job.companyName && !job.companyPhone" class="text-xs text-muted">
+            Контакти компанії не вказані
+          </p>
+        </div>
+
         <div class="bg-white p-4 rounded-2xl border border-slate-200 space-y-3">
           <p class="text-xs text-muted">
-            Якщо ви авторизовані як пошукач, можете відгукнутися на вакансію або додати її в
-            обране.
+            Якщо ви авторизовані як пошукач, можете відгукнутися на вакансію або додати її в обране.
           </p>
 
           <button
