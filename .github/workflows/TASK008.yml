@@ -1,0 +1,420 @@
+name: TASK008 - Show company name & phone on jobs list and job page
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  task008:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure DB util exists (safe)
+        run: |
+          mkdir -p server/utils
+
+          if [ ! -f server/utils/db.ts ]; then
+            cat <<'EOF' > server/utils/db.ts
+            import mongoose from 'mongoose'
+
+            let cached: { conn: typeof mongoose | null; promise: Promise<typeof mongoose> | null } =
+              // @ts-expect-error global cache
+              globalThis.__mongoose_cache || { conn: null, promise: null }
+
+            // @ts-expect-error global cache
+            globalThis.__mongoose_cache = cached
+
+            export async function connectDB() {
+              if (cached.conn) return cached.conn
+              if (!cached.promise) {
+                const uri = process.env.MONGODB_URI || process.env.MONGODB_URL
+                if (!uri) {
+                  throw new Error('MONGODB_URI (або MONGODB_URL) не задано в .env')
+                }
+                cached.promise = mongoose.connect(uri, { dbName: process.env.MONGODB_DB || undefined })
+              }
+              cached.conn = await cached.promise
+              return cached.conn
+            }
+            EOF
+          fi
+
+      - name: Update API jobs endpoints (inject companyName/companyPhone)
+        run: |
+          set -e
+          mkdir -p server/api/jobs
+
+          # --- знайдемо файл для /api/jobs (list) ---
+          LIST_FILE=""
+          if [ -f "server/api/jobs.get.ts" ]; then LIST_FILE="server/api/jobs.get.ts"; fi
+          if [ -z "$LIST_FILE" ] && [ -f "server/api/jobs/index.get.ts" ]; then LIST_FILE="server/api/jobs/index.get.ts"; fi
+          if [ -z "$LIST_FILE" ] && [ -f "server/api/jobs/index.ts" ]; then LIST_FILE="server/api/jobs/index.ts"; fi
+          if [ -z "$LIST_FILE" ]; then
+            # якщо не було — створимо канонічний
+            LIST_FILE="server/api/jobs.get.ts"
+          fi
+
+          # --- знайдемо файл для /api/jobs/[id] (detail) ---
+          DETAIL_FILE=""
+          if [ -f "server/api/jobs/[id].get.ts" ]; then DETAIL_FILE="server/api/jobs/[id].get.ts"; fi
+          if [ -z "$DETAIL_FILE" ] && [ -f "server/api/jobs/[id].ts" ]; then DETAIL_FILE="server/api/jobs/[id].ts"; fi
+          if [ -z "$DETAIL_FILE" ]; then
+            DETAIL_FILE="server/api/jobs/[id].get.ts"
+          fi
+
+          cat <<'EOF' > "$LIST_FILE"
+          import Job from '~/server/models/Job'
+          import Company from '~/server/models/Company'
+          import { connectDB } from '~/server/utils/db'
+
+          export default defineEventHandler(async (event) => {
+            await connectDB()
+
+            const q = getQuery(event)
+            const term = String(q.term || '').trim()
+            const city = String(q.city || '').trim()
+
+            const filter: any = {}
+            if (term) {
+              filter.$or = [
+                { title: { $regex: term, $options: 'i' } },
+                { description: { $regex: term, $options: 'i' } },
+                { requirements: { $regex: term, $options: 'i' } }
+              ]
+            }
+            if (city) {
+              filter.city = { $regex: city, $options: 'i' }
+            }
+
+            const jobs: any[] = await Job.find(filter).sort({ createdAt: -1 }).lean()
+
+            // Спробуємо зв'язати вакансію з компанією різними способами:
+            // - job.companyId (якщо є)
+            // - job.employerId / job.ownerId / job.userId -> Company.ownerId
+            const companyIds = new Set<string>()
+            const ownerIds = new Set<string>()
+
+            for (const j of jobs) {
+              if (j.companyId) companyIds.add(String(j.companyId))
+              if (j.employerId) ownerIds.add(String(j.employerId))
+              if (j.ownerId) ownerIds.add(String(j.ownerId))
+              if (j.userId) ownerIds.add(String(j.userId))
+            }
+
+            const companies: any[] = await Company.find({
+              $or: [
+                companyIds.size ? { _id: { $in: Array.from(companyIds) } } : null,
+                ownerIds.size ? { ownerId: { $in: Array.from(ownerIds) } } : null
+              ].filter(Boolean) as any
+            }).lean()
+
+            const byId = new Map(companies.map((c) => [String(c._id), c]))
+            const byOwner = new Map(companies.map((c) => [String(c.ownerId), c]))
+
+            return jobs.map((j) => {
+              const c =
+                (j.companyId ? byId.get(String(j.companyId)) : null) ||
+                (j.employerId ? byOwner.get(String(j.employerId)) : null) ||
+                (j.ownerId ? byOwner.get(String(j.ownerId)) : null) ||
+                (j.userId ? byOwner.get(String(j.userId)) : null)
+
+              return {
+                ...j,
+                companyName: c?.name || '',
+                companyPhone: c?.phone || ''
+              }
+            })
+          })
+          EOF
+
+          cat <<'EOF' > "$DETAIL_FILE"
+          import Job from '~/server/models/Job'
+          import Company from '~/server/models/Company'
+          import { connectDB } from '~/server/utils/db'
+
+          export default defineEventHandler(async (event) => {
+            await connectDB()
+
+            const id = getRouterParam(event, 'id')
+            if (!id) {
+              throw createError({ statusCode: 400, statusMessage: 'Не вказано id вакансії' })
+            }
+
+            const job: any = await Job.findById(id).lean()
+            if (!job) {
+              throw createError({ statusCode: 404, statusMessage: 'Вакансію не знайдено' })
+            }
+
+            const company =
+              (job.companyId ? await Company.findById(job.companyId).lean() : null) ||
+              (job.employerId ? await Company.findOne({ ownerId: job.employerId }).lean() : null) ||
+              (job.ownerId ? await Company.findOne({ ownerId: job.ownerId }).lean() : null) ||
+              (job.userId ? await Company.findOne({ ownerId: job.userId }).lean() : null)
+
+            return {
+              ...job,
+              companyName: company?.name || '',
+              companyPhone: company?.phone || ''
+            }
+          })
+          EOF
+
+      - name: Update UI pages (jobs list + job detail)
+        run: |
+          mkdir -p pages/jobs
+
+          # pages/jobs/index.vue
+          cat <<'EOF' > pages/jobs/index.vue
+          <script setup lang="ts">
+          const term = ref('')
+          const city = ref('')
+
+          const { data: jobs, refresh } = await useFetch('/api/jobs', {
+            query: { term, city }
+          })
+
+          const search = async () => {
+            await refresh()
+          }
+          </script>
+
+          <template>
+            <section class="space-y-6">
+              <div>
+                <h1 class="text-2xl font-semibold text-primary">Знайди роботу своєї мрії</h1>
+                <p class="text-sm text-muted mt-1">
+                  Job-board для пошуку роботи та працівників.
+                </p>
+              </div>
+
+              <div
+                class="grid gap-3 md:grid-cols-4 items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-200"
+              >
+                <input
+                  v-model="term"
+                  type="text"
+                  placeholder="Посада або ключові слова"
+                  class="md:col-span-2 text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                />
+                <input
+                  v-model="city"
+                  type="text"
+                  placeholder="Місто"
+                  class="text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                />
+                <button
+                  @click="search"
+                  class="text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90"
+                >
+                  Пошук
+                </button>
+              </div>
+
+              <div class="space-y-3">
+                <div v-if="!jobs?.length" class="text-sm text-muted">
+                  За введеними критеріями для пошуку вакансій поки немає
+                </div>
+
+                <article
+                  v-for="job in jobs"
+                  :key="job._id"
+                  class="bg-white p-4 rounded-2xl border border-slate-200 hover:border-accent transition flex flex-col gap-2"
+                >
+                  <div class="flex justify-between gap-4 items-baseline">
+                    <div class="min-w-0">
+                      <NuxtLink
+                        :to="`/jobs/${job._id}`"
+                        class="text-base font-semibold text-primary hover:text-accent"
+                      >
+                        {{ job.title }}
+                      </NuxtLink>
+
+                      <p class="text-xs text-muted mt-1">
+                        {{ job.city || 'Місто не вказано' }} · {{ job.employmentType }} ·
+                        {{ job.workFormat }}
+                      </p>
+
+                      <!-- TASK008: компанія + телефон -->
+                      <p v-if="job.companyName || job.companyPhone" class="text-xs text-slate-700 mt-1">
+                        <span v-if="job.companyName" class="font-medium">{{ job.companyName }}</span>
+                        <span v-if="job.companyName && job.companyPhone"> · </span>
+                        <span v-if="job.companyPhone">{{ job.companyPhone }}</span>
+                      </p>
+                      <p v-else class="text-xs text-muted mt-1">
+                        Компанія: не вказано
+                      </p>
+                    </div>
+
+                    <div class="text-right text-sm text-primary font-medium whitespace-nowrap">
+                      <span v-if="job.salaryFrom || job.salaryTo">
+                        {{ job.salaryFrom || '—' }}–{{ job.salaryTo || '—' }} ₴
+                      </span>
+                      <span v-else class="text-muted text-xs">Зарплата не вказана</span>
+                    </div>
+                  </div>
+
+                  <p class="text-xs text-slate-600">
+                    {{ job.description }}
+                  </p>
+                </article>
+              </div>
+            </section>
+          </template>
+          EOF
+
+          # pages/jobs/[id].vue
+          cat <<'EOF' > pages/jobs/[id].vue
+          <script setup lang="ts">
+          const route = useRoute()
+          const user = useAuthUser()
+          const { $notify } = useNuxtApp()
+
+          const { data: job } = await useFetch(`/api/jobs/${route.params.id}`)
+
+          const applyMessage = ref('')
+
+          const applyToJob = async () => {
+            await $fetch('/api/applications', {
+              method: 'POST',
+              body: { jobId: route.params.id, message: applyMessage.value }
+            })
+            $notify('Відгук відправлено', 'success')
+            applyMessage.value = ''
+          }
+
+          const toggleFavorite = async () => {
+            await $fetch('/api/favorites', {
+              method: 'POST',
+              body: { jobId: route.params.id }
+            })
+            $notify('Додано в обране (або вже було)', 'info')
+          }
+          </script>
+
+          <template>
+            <section v-if="job" class="space-y-4">
+              <div class="flex justify-between gap-4 items-start">
+                <div>
+                  <h1 class="text-2xl font-semibold text-primary">
+                    {{ job.title }}
+                  </h1>
+
+                  <p class="text-sm text-muted mt-1">
+                    {{ job.city || 'Місто не вказано' }} · {{ job.employmentType }} · {{ job.workFormat }}
+                  </p>
+
+                  <!-- TASK008: компанія + телефон -->
+                  <p v-if="job.companyName || job.companyPhone" class="text-sm text-slate-700 mt-1">
+                    <span v-if="job.companyName" class="font-semibold">{{ job.companyName }}</span>
+                    <span v-if="job.companyName && job.companyPhone"> · </span>
+                    <span v-if="job.companyPhone">{{ job.companyPhone }}</span>
+                  </p>
+                </div>
+
+                <div class="text-right text-sm text-primary font-medium">
+                  <span v-if="job.salaryFrom || job.salaryTo">
+                    {{ job.salaryFrom || '—' }}–{{ job.salaryTo || '—' }} ₴
+                  </span>
+                  <span v-else class="text-muted text-xs">Зарплата не вказана</span>
+                </div>
+              </div>
+
+              <div class="grid md:grid-cols-3 gap-6">
+                <div class="md:col-span-2 space-y-4">
+                  <div>
+                    <h2 class="text-sm font-semibold text-primary mb-1">Опис</h2>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">
+                      {{ job.description }}
+                    </p>
+                  </div>
+
+                  <div v-if="job.requirements">
+                    <h2 class="text-sm font-semibold text-primary mb-1">Вимоги</h2>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">
+                      {{ job.requirements }}
+                    </p>
+                  </div>
+
+                  <div v-if="job.conditions">
+                    <h2 class="text-sm font-semibold text-primary mb-1">Умови</h2>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">
+                      {{ job.conditions }}
+                    </p>
+                  </div>
+                </div>
+
+                <aside class="space-y-4">
+                  <!-- Карточка компанії -->
+                  <div class="bg-white p-4 rounded-2xl border border-slate-200 space-y-2">
+                    <h3 class="text-sm font-semibold text-primary">Компанія</h3>
+                    <p v-if="job.companyName" class="text-sm text-slate-700">
+                      {{ job.companyName }}
+                    </p>
+                    <p v-if="job.companyPhone" class="text-sm text-slate-700">
+                      Телефон: <span class="font-medium">{{ job.companyPhone }}</span>
+                    </p>
+                    <p v-if="!job.companyName && !job.companyPhone" class="text-xs text-muted">
+                      Контакти компанії не вказані
+                    </p>
+                  </div>
+
+                  <div class="bg-white p-4 rounded-2xl border border-slate-200 space-y-3">
+                    <p class="text-xs text-muted">
+                      Якщо ви авторизовані як пошукач, можете відгукнутися на вакансію або додати її в обране.
+                    </p>
+
+                    <button
+                      v-if="user?.role === 'seeker'"
+                      @click="toggleFavorite"
+                      class="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 hover:border-accent"
+                    >
+                      Додати в обране
+                    </button>
+
+                    <div v-if="user?.role === 'seeker'" class="space-y-2">
+                      <textarea
+                        v-model="applyMessage"
+                        rows="3"
+                        placeholder="Коротке супровідне повідомлення"
+                        class="w-full text-xs px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                      />
+                      <button
+                        @click="applyToJob"
+                        class="w-full text-xs px-3 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90"
+                      >
+                        Відгукнутися
+                      </button>
+                    </div>
+
+                    <p v-else class="text-xs text-muted">
+                      Для відгуку на вакансію потрібно увійти як пошукач.
+                    </p>
+                  </div>
+                </aside>
+              </div>
+            </section>
+          </template>
+          EOF
+
+      - name: Commit and push TASK008
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add server/utils/db.ts || true
+
+          # jobs api files we created/overwrote:
+          git add server/api/jobs.get.ts server/api/jobs/index.get.ts server/api/jobs/index.ts 2>/dev/null || true
+          git add server/api/jobs/\[id\].get.ts server/api/jobs/\[id\].ts 2>/dev/null || true
+
+          git add pages/jobs/index.vue pages/jobs/\[id\].vue
+
+          git commit -m "TASK008: show company name & phone on jobs list and job page" || echo "No changes to commit"
+          git push
