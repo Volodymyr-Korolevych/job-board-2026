@@ -1,0 +1,746 @@
+name: TASK007 - Add company contact phone
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  task007:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply TASK007 changes (schema + register + employer company page)
+        run: |
+          mkdir -p server/models pages/auth pages/employer
+
+          # -----------------------------
+          # server/models/Company.ts
+          # -----------------------------
+          cat <<'EOF' > server/models/Company.ts
+          import { Schema, model, Types } from 'mongoose'
+
+          const CompanySchema = new Schema(
+            {
+              ownerId: { type: Types.ObjectId, ref: 'User', required: true },
+              name: { type: String, required: true },
+              logoUrl: String,
+              city: String,
+              website: String,
+              description: String,
+              industry: String,
+              staffCount: Number,
+
+              // TASK007: контактний телефон компанії
+              phone: String
+            },
+            { timestamps: true }
+          )
+
+          export default model('Company', CompanySchema)
+          EOF
+
+          # -----------------------------
+          # pages/auth/register.vue
+          # (додано поле phone для компанії + валідація + відправка в body)
+          # -----------------------------
+          cat <<'EOF' > pages/auth/register.vue
+          <script setup lang="ts">
+          const email = ref('')
+          const password = ref('')
+          const role = ref<'seeker' | 'employer'>('seeker')
+          const error = ref<string | null>(null)
+          const submitting = ref(false)
+          const user = useAuthUser()
+
+          // Профіль пошукача
+          const seekerProfile = reactive({
+            fullName: '',
+            city: '',
+            desiredPosition: '',
+            level: 'junior',
+            cvLink: ''
+          })
+
+          // Профіль компанії
+          const companyProfile = reactive({
+            name: '',
+            city: '',
+            phone: '', // TASK007
+            website: '',
+            description: '',
+            industry: '',
+            staffCount: null as number | null
+          })
+
+          const fieldErrors = reactive<Record<string, string>>({
+            email: '',
+            password: '',
+            fullName: '',
+            companyName: '',
+            cvLink: '',
+            website: '',
+            staffCount: '',
+            phone: '' // TASK007
+          })
+
+          const clearFieldErrors = () => {
+            for (const k of Object.keys(fieldErrors)) fieldErrors[k] = ''
+          }
+
+          const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
+          const isHttpUrl = (v: string) => /^https?:\/\/.+/i.test(v.trim())
+
+          // Телефон: дозволяємо +, цифри, пробіли, (), -, але перевіряємо що цифр >= 10
+          const normalizePhone = (v: string) => v.trim()
+          const isValidPhone = (v: string) => {
+            const s = normalizePhone(v)
+            if (!/^[+\d\s().-]+$/.test(s)) return false
+            const digits = s.replace(/\D/g, '')
+            return digits.length >= 10
+          }
+
+          const mapAuthError = (e: any): string => {
+            const status = e?.statusCode || e?.data?.statusCode || e?.response?.status
+            const msg = String(e?.data?.statusMessage || e?.data?.message || e?.message || '').toLowerCase()
+
+            if (status === 409) return 'Користувач з таким email вже існує'
+            if (status === 400) return 'Перевірте поля реєстрації'
+            if (status === 429) return 'Забагато спроб. Спробуйте пізніше'
+            if (msg.includes('duplicate') || msg.includes('already') || msg.includes('exists')) return 'Користувач з таким email вже існує'
+            if (msg.includes('invalid') && msg.includes('email')) return 'Вкажіть коректний email'
+            if (msg.includes('password') && (msg.includes('short') || msg.includes('min'))) return 'Пароль занадто короткий'
+            if (msg.includes('fetch') || msg.includes('network') || msg.includes('failed to fetch')) {
+              return 'Помилка мережі. Перевірте інтернет і спробуйте ще раз'
+            }
+            return e?.data?.statusMessage || 'Не вдалося зареєструватися. Спробуйте ще раз'
+          }
+
+          const validate = () => {
+            clearFieldErrors()
+            let ok = true
+
+            if (!email.value.trim()) {
+              fieldErrors.email = 'Вкажіть email'
+              ok = false
+            } else if (!isEmail(email.value)) {
+              fieldErrors.email = 'Email має бути коректним (наприклад, name@gmail.com)'
+              ok = false
+            }
+
+            if (!password.value) {
+              fieldErrors.password = 'Вкажіть пароль'
+              ok = false
+            } else if (password.value.length < 6) {
+              fieldErrors.password = 'Пароль має містити щонайменше 6 символів'
+              ok = false
+            }
+
+            if (role.value === 'seeker') {
+              if (!seekerProfile.fullName.trim()) {
+                fieldErrors.fullName = "Вкажіть повне ім'я"
+                ok = false
+              }
+              if (seekerProfile.cvLink && !isHttpUrl(seekerProfile.cvLink)) {
+                fieldErrors.cvLink = 'Лінк на CV має починатися з http:// або https://'
+                ok = false
+              }
+            } else {
+              if (!companyProfile.name.trim()) {
+                fieldErrors.companyName = 'Вкажіть назву компанії'
+                ok = false
+              }
+
+              // TASK007: телефон (не обов'язковий, але якщо введений — має бути коректним)
+              if (companyProfile.phone && !isValidPhone(companyProfile.phone)) {
+                fieldErrors.phone = 'Вкажіть коректний номер телефону (мінімум 10 цифр)'
+                ok = false
+              }
+
+              if (companyProfile.website && !isHttpUrl(companyProfile.website)) {
+                fieldErrors.website = 'Сайт має починатися з http:// або https://'
+                ok = false
+              }
+              if (companyProfile.staffCount !== null) {
+                const n = Number(companyProfile.staffCount)
+                if (Number.isNaN(n) || n < 1) {
+                  fieldErrors.staffCount = 'Кількість співробітників має бути числом від 1'
+                  ok = false
+                }
+              }
+            }
+
+            return ok
+          }
+
+          const submit = async () => {
+            error.value = null
+            if (!validate()) {
+              error.value = 'Перевірте поля форми'
+              return
+            }
+
+            submitting.value = true
+            try {
+              const body: any = {
+                email: email.value.trim(),
+                password: password.value,
+                role: role.value
+              }
+
+              if (role.value === 'seeker') {
+                Object.assign(body, {
+                  fullName: seekerProfile.fullName,
+                  city: seekerProfile.city,
+                  desiredPosition: seekerProfile.desiredPosition,
+                  level: seekerProfile.level,
+                  cvLink: seekerProfile.cvLink
+                })
+              } else {
+                Object.assign(body, {
+                  companyName: companyProfile.name,
+                  companyCity: companyProfile.city,
+                  companyPhone: companyProfile.phone.trim(), // TASK007
+                  companyWebsite: companyProfile.website,
+                  companyDescription: companyProfile.description,
+                  companyIndustry: companyProfile.industry,
+                  companyStaffCount: companyProfile.staffCount
+                })
+              }
+
+              await $fetch('/api/auth/register', { method: 'POST', body })
+
+              // Автоматичний логін після реєстрації
+              const loginRes: any = await $fetch('/api/auth/login', {
+                method: 'POST',
+                body: { email: email.value.trim(), password: password.value }
+              })
+
+              user.value = loginRes.user
+
+              if (role.value === 'seeker') {
+                await navigateTo('/profile')
+              } else {
+                await navigateTo('/employer/company')
+              }
+            } catch (e: any) {
+              error.value = mapAuthError(e)
+            } finally {
+              submitting.value = false
+            }
+          }
+          </script>
+
+          <template>
+            <section class="max-w-xl mx-auto bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
+              <h1 class="text-lg font-semibold text-primary">Реєстрація</h1>
+
+              <div v-if="error" class="text-xs text-red-500">
+                {{ error }}
+              </div>
+
+              <form novalidate @submit.prevent="submit" class="space-y-4">
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Роль</label>
+                  <div class="flex gap-2 text-xs">
+                    <button
+                      type="button"
+                      @click="role = 'seeker'"
+                      :class="[
+                        'flex-1 px-3 py-2 rounded-xl border',
+                        role === 'seeker' ? 'border-accent bg-blue-50' : 'border-slate-300'
+                      ]"
+                    >
+                      Пошукач
+                    </button>
+                    <button
+                      type="button"
+                      @click="role = 'employer'"
+                      :class="[
+                        'flex-1 px-3 py-2 rounded-xl border',
+                        role === 'employer' ? 'border-accent bg-blue-50' : 'border-slate-300'
+                      ]"
+                    >
+                      Роботодавець
+                    </button>
+                  </div>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-3">
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Email</label>
+                    <input
+                      v-model="email"
+                      type="text"
+                      inputmode="email"
+                      autocomplete="email"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                    <p v-if="fieldErrors.email" class="text-[11px] text-red-500">{{ fieldErrors.email }}</p>
+                  </div>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Пароль</label>
+                    <input
+                      v-model="password"
+                      type="password"
+                      autocomplete="new-password"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                    <p v-if="fieldErrors.password" class="text-[11px] text-red-500">{{ fieldErrors.password }}</p>
+                  </div>
+                </div>
+
+                <!-- Блок профілю пошукача -->
+                <div v-if="role === 'seeker'" class="space-y-3 border-t border-slate-200 pt-3">
+                  <h2 class="text-sm font-semibold text-primary">Профіль пошукача</h2>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Повне ім'я</label>
+                    <input
+                      v-model="seekerProfile.fullName"
+                      type="text"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                    <p v-if="fieldErrors.fullName" class="text-[11px] text-red-500">{{ fieldErrors.fullName }}</p>
+                  </div>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Місто</label>
+                    <input
+                      v-model="seekerProfile.city"
+                      type="text"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Бажана посада</label>
+                    <input
+                      v-model="seekerProfile.desiredPosition"
+                      type="text"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                      <label class="text-xs text-muted">Рівень</label>
+                      <select
+                        v-model="seekerProfile.level"
+                        class="w-full text-xs px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                      >
+                        <option value="junior">Junior</option>
+                        <option value="middle">Middle</option>
+                        <option value="senior">Senior</option>
+                      </select>
+                    </div>
+
+                    <div class="space-y-1">
+                      <label class="text-xs text-muted">Лінк на CV</label>
+                      <input
+                        v-model="seekerProfile.cvLink"
+                        type="text"
+                        inputmode="url"
+                        placeholder="https://..."
+                        class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                      />
+                      <p v-if="fieldErrors.cvLink" class="text-[11px] text-red-500">{{ fieldErrors.cvLink }}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Блок профілю компанії -->
+                <div v-else class="space-y-3 border-t border-slate-200 pt-3">
+                  <h2 class="text-sm font-semibold text-primary">Профіль компанії</h2>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Назва компанії</label>
+                    <input
+                      v-model="companyProfile.name"
+                      type="text"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                    <p v-if="fieldErrors.companyName" class="text-[11px] text-red-500">{{ fieldErrors.companyName }}</p>
+                  </div>
+
+                  <div class="grid md:grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                      <label class="text-xs text-muted">Місто</label>
+                      <input
+                        v-model="companyProfile.city"
+                        type="text"
+                        class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                      />
+                    </div>
+
+                    <div class="space-y-1">
+                      <label class="text-xs text-muted">Контактний телефон (опційно)</label>
+                      <input
+                        v-model="companyProfile.phone"
+                        type="text"
+                        inputmode="tel"
+                        placeholder="+380..."
+                        class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                      />
+                      <p v-if="fieldErrors.phone" class="text-[11px] text-red-500">{{ fieldErrors.phone }}</p>
+                    </div>
+                  </div>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Сайт або лінк</label>
+                    <input
+                      v-model="companyProfile.website"
+                      type="text"
+                      inputmode="url"
+                      placeholder="https://company.com"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                    <p v-if="fieldErrors.website" class="text-[11px] text-red-500">{{ fieldErrors.website }}</p>
+                  </div>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Опис компанії</label>
+                    <textarea
+                      v-model="companyProfile.description"
+                      rows="3"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+
+                  <div class="grid md:grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                      <label class="text-xs text-muted">Сфера діяльності</label>
+                      <input
+                        v-model="companyProfile.industry"
+                        type="text"
+                        class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                      />
+                    </div>
+
+                    <div class="space-y-1">
+                      <label class="text-xs text-muted">К-сть співробітників (опційно)</label>
+                      <input
+                        v-model.number="companyProfile.staffCount"
+                        type="number"
+                        min="1"
+                        class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                      />
+                      <p v-if="fieldErrors.staffCount" class="text-[11px] text-red-500">{{ fieldErrors.staffCount }}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  :disabled="submitting"
+                  class="w-full text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90 disabled:opacity-60"
+                >
+                  {{ submitting ? 'Реєстрація...' : 'Зареєструватися' }}
+                </button>
+              </form>
+
+              <p class="text-xs text-muted">
+                Вже маєте акаунт?
+                <NuxtLink to="/auth/login" class="text-accent underline">
+                  Увійти
+                </NuxtLink>
+              </p>
+            </section>
+          </template>
+          EOF
+
+          # -----------------------------
+          # pages/employer/company.vue
+          # (додано поле phone + валідація + hasChanges)
+          # -----------------------------
+          cat <<'EOF' > pages/employer/company.vue
+          <script setup lang="ts">
+          const saving = ref(false)
+          const saved = ref(false)
+          const error = ref<string | null>(null)
+
+          const form = reactive({
+            name: '',
+            city: '',
+            phone: '', // TASK007
+            website: '',
+            description: '',
+            industry: '',
+            staffCount: null as number | null
+          })
+
+          const initial = ref({
+            name: '',
+            city: '',
+            phone: '', // TASK007
+            website: '',
+            description: '',
+            industry: '',
+            staffCount: null as number | null
+          })
+
+          const fieldErrors = reactive<Record<string, string>>({
+            name: '',
+            phone: '', // TASK007
+            website: '',
+            staffCount: ''
+          })
+
+          const clearFieldErrors = () => {
+            fieldErrors.name = ''
+            fieldErrors.phone = ''
+            fieldErrors.website = ''
+            fieldErrors.staffCount = ''
+          }
+
+          const normalizeUrl = (url: string) => url.trim()
+
+          const normalizePhone = (v: string) => v.trim()
+          const isValidPhone = (v: string) => {
+            const s = normalizePhone(v)
+            if (!/^[+\d\s().-]+$/.test(s)) return false
+            const digits = s.replace(/\D/g, '')
+            return digits.length >= 10
+          }
+
+          const validate = () => {
+            clearFieldErrors()
+            let ok = true
+
+            if (!form.name.trim()) {
+              fieldErrors.name = 'Вкажіть назву компанії'
+              ok = false
+            }
+
+            if (form.phone) {
+              if (!isValidPhone(form.phone)) {
+                fieldErrors.phone = 'Вкажіть коректний номер телефону (мінімум 10 цифр)'
+                ok = false
+              }
+            }
+
+            if (form.website) {
+              const u = normalizeUrl(form.website)
+              // дозволяємо тільки http/https
+              if (!/^https?:\/\/.+/i.test(u)) {
+                fieldErrors.website = 'Вкажіть коректне посилання (наприклад, https://company.com)'
+                ok = false
+              }
+            }
+
+            if (form.staffCount !== null) {
+              const n = Number(form.staffCount)
+              if (Number.isNaN(n) || n < 1) {
+                fieldErrors.staffCount = 'Кількість співробітників має бути числом від 1'
+                ok = false
+              }
+            }
+
+            return ok
+          }
+
+          const { data, error: fetchError } = await useFetch('/api/company')
+
+          const applyFromServer = (src: any) => {
+            form.name = src?.name || ''
+            form.city = src?.city || ''
+            form.phone = src?.phone || ''
+            form.website = src?.website || ''
+            form.description = src?.description || ''
+            form.industry = src?.industry || ''
+            form.staffCount = src?.staffCount ?? null
+
+            initial.value = {
+              name: form.name,
+              city: form.city,
+              phone: form.phone,
+              website: form.website,
+              description: form.description,
+              industry: form.industry,
+              staffCount: form.staffCount
+            }
+          }
+
+          if (data.value) applyFromServer(data.value)
+
+          const hasChanges = computed(() => {
+            const a = initial.value
+            return (
+              form.name !== a.name ||
+              form.city !== a.city ||
+              form.phone !== a.phone ||
+              form.website !== a.website ||
+              form.description !== a.description ||
+              form.industry !== a.industry ||
+              (form.staffCount ?? null) !== (a.staffCount ?? null)
+            )
+          })
+
+          watch(
+            () => ({ ...form }),
+            () => {
+              if (saved.value) saved.value = false
+            },
+            { deep: true }
+          )
+
+          const submit = async () => {
+            error.value = null
+            saved.value = false
+
+            if (!validate()) {
+              error.value = 'Перевірте поля форми'
+              return
+            }
+            if (!hasChanges.value) return
+
+            saving.value = true
+            try {
+              const updated: any = await $fetch('/api/company', {
+                method: 'PUT',
+                body: form
+              })
+              applyFromServer(updated)
+              saved.value = true
+              setTimeout(() => (saved.value = false), 2000)
+            } catch (e: any) {
+              error.value = e?.data?.statusMessage || 'Не вдалося зберегти профіль компанії'
+            } finally {
+              saving.value = false
+            }
+          }
+          </script>
+
+          <template>
+            <section class="max-w-xl space-y-4">
+              <h1 class="text-lg font-semibold text-primary">Профіль компанії</h1>
+
+              <p class="text-xs text-muted">
+                Дані компанії відображаються у вакансіях і допомагають пошукачам краще вас зрозуміти.
+              </p>
+
+              <div v-if="fetchError" class="text-xs text-red-500">
+                {{ fetchError.data?.statusMessage || 'Помилка завантаження профілю компанії' }}
+              </div>
+
+              <div v-if="error" class="text-xs text-red-500">
+                {{ error }}
+              </div>
+
+              <form
+                v-if="!fetchError"
+                novalidate
+                @submit.prevent="submit"
+                class="space-y-3 bg-white p-4 rounded-2xl border border-slate-200"
+              >
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Назва компанії</label>
+                  <input
+                    v-model="form.name"
+                    type="text"
+                    aria-required="true"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                  <p v-if="fieldErrors.name" class="text-[11px] text-red-500">{{ fieldErrors.name }}</p>
+                </div>
+
+                <div class="grid sm:grid-cols-2 gap-3">
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Місто</label>
+                    <input
+                      v-model="form.city"
+                      type="text"
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                  </div>
+
+                  <div class="space-y-1">
+                    <label class="text-xs text-muted">Контактний телефон (опційно)</label>
+                    <input
+                      v-model="form.phone"
+                      type="text"
+                      inputmode="tel"
+                      placeholder="+380..."
+                      class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                    />
+                    <p v-if="fieldErrors.phone" class="text-[11px] text-red-500">{{ fieldErrors.phone }}</p>
+                  </div>
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Сайт або лінк</label>
+                  <input
+                    v-model="form.website"
+                    type="text"
+                    inputmode="url"
+                    placeholder="https://company.com"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                  <p v-if="fieldErrors.website" class="text-[11px] text-red-500">{{ fieldErrors.website }}</p>
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Сфера діяльності</label>
+                  <input
+                    v-model="form.industry"
+                    type="text"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Кількість співробітників (опційно)</label>
+                  <input
+                    v-model.number="form.staffCount"
+                    type="number"
+                    min="1"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                  <p v-if="fieldErrors.staffCount" class="text-[11px] text-red-500">{{ fieldErrors.staffCount }}</p>
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-xs text-muted">Опис компанії</label>
+                  <textarea
+                    v-model="form.description"
+                    rows="3"
+                    class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div class="pt-1">
+                  <button
+                    v-if="hasChanges && !saved"
+                    type="submit"
+                    :disabled="saving"
+                    class="w-full text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90 disabled:opacity-60"
+                  >
+                    {{ saving ? 'Збереження...' : 'Зберегти' }}
+                  </button>
+
+                  <div
+                    v-else-if="saved"
+                    class="w-full text-sm px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 font-medium text-center border border-emerald-200"
+                  >
+                    Збережено ✓
+                  </div>
+                </div>
+              </form>
+            </section>
+          </template>
+          EOF
+
+      - name: Commit and push TASK007
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add server/models/Company.ts pages/auth/register.vue pages/employer/company.vue
+          git commit -m "TASK007: add company contact phone (schema + register + company profile)" || echo "No changes to commit"
+          git push
