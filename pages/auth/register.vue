@@ -283,9 +283,9 @@ const submit = async () => {
               v-model="seekerProfile.level"
               class="w-full text-xs px-3 py-2 border rounded-xl outline-none focus:border-accent"
             >
-              <option value="junior">Junior</option>
-              <option value="middle">Middle</option>
-              <option value="senior">Senior</option>
+              <option value="junior">Початковий</option>
+              <option value="middle">Середній</option>
+              <option value="senior">Фахівець</option>
             </select>
           </div>
 

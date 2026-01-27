@@ -21,7 +21,7 @@ const toggleFavorite = async () => {
     method: 'POST',
     body: { jobId: route.params.id }
   })
-  $notify('Додано в обране (або вже було)', 'info')
+  $notify('Додано в обране', 'info')
 }
 </script>
 
@@ -29,15 +29,12 @@ const toggleFavorite = async () => {
   <section v-if="job" class="space-y-4">
     <div class="flex justify-between gap-4 items-start">
       <div>
-        <h1 class="text-2xl font-semibold text-primary">
-          {{ job.title }}
-        </h1>
+        <h1 class="text-2xl font-semibold text-primary">{{ job.title }}</h1>
 
         <p class="text-sm text-muted mt-1">
           {{ job.city || 'Місто не вказано' }} · {{ job.employmentType }} · {{ job.workFormat }}
         </p>
 
-        <!-- TASK008: компанія + телефон -->
         <p v-if="job.companyName || job.companyPhone" class="text-sm text-slate-700 mt-1">
           <span v-if="job.companyName" class="font-semibold">{{ job.companyName }}</span>
           <span v-if="job.companyName && job.companyPhone"> · </span>
@@ -57,33 +54,24 @@ const toggleFavorite = async () => {
       <div class="md:col-span-2 space-y-4">
         <div>
           <h2 class="text-sm font-semibold text-primary mb-1">Опис</h2>
-          <p class="text-sm text-slate-700 whitespace-pre-line">
-            {{ job.description }}
-          </p>
+          <p class="text-sm text-slate-700 whitespace-pre-line">{{ job.description }}</p>
         </div>
 
         <div v-if="job.requirements">
           <h2 class="text-sm font-semibold text-primary mb-1">Вимоги</h2>
-          <p class="text-sm text-slate-700 whitespace-pre-line">
-            {{ job.requirements }}
-          </p>
+          <p class="text-sm text-slate-700 whitespace-pre-line">{{ job.requirements }}</p>
         </div>
 
         <div v-if="job.conditions">
           <h2 class="text-sm font-semibold text-primary mb-1">Умови</h2>
-          <p class="text-sm text-slate-700 whitespace-pre-line">
-            {{ job.conditions }}
-          </p>
+          <p class="text-sm text-slate-700 whitespace-pre-line">{{ job.conditions }}</p>
         </div>
       </div>
 
       <aside class="space-y-4">
-        <!-- Карточка компанії -->
         <div class="bg-white p-4 rounded-2xl border border-slate-200 space-y-2">
           <h3 class="text-sm font-semibold text-primary">Компанія</h3>
-          <p v-if="job.companyName" class="text-sm text-slate-700">
-            {{ job.companyName }}
-          </p>
+          <p v-if="job.companyName" class="text-sm text-slate-700">{{ job.companyName }}</p>
           <p v-if="job.companyPhone" class="text-sm text-slate-700">
             Телефон: <span class="font-medium">{{ job.companyPhone }}</span>
           </p>
@@ -97,25 +85,16 @@ const toggleFavorite = async () => {
             Якщо ви авторизовані як пошукач, можете відгукнутися на вакансію або додати її в обране.
           </p>
 
-          <button
-            v-if="user?.role === 'seeker'"
-            @click="toggleFavorite"
-            class="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 hover:border-accent"
-          >
+          <button v-if="user?.role === 'seeker'" @click="toggleFavorite"
+            class="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 hover:border-accent">
             Додати в обране
           </button>
 
           <div v-if="user?.role === 'seeker'" class="space-y-2">
-            <textarea
-              v-model="applyMessage"
-              rows="3"
-              placeholder="Коротке супровідне повідомлення"
-              class="w-full text-xs px-3 py-2 border rounded-xl outline-none focus:border-accent"
-            />
-            <button
-              @click="applyToJob"
-              class="w-full text-xs px-3 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90"
-            >
+            <textarea v-model="applyMessage" rows="3" placeholder="Коротке супровідне повідомлення"
+              class="w-full text-xs px-3 py-2 border rounded-xl outline-none focus:border-accent" />
+            <button @click="applyToJob"
+              class="w-full text-xs px-3 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90">
               Відгукнутися
             </button>
           </div>

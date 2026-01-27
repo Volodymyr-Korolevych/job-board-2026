@@ -1,14 +1,58 @@
-import Job from '../../models/Job'
+import Job from '~/server/models/Job'
+import Company from '~/server/models/Company'
+import { connectDB } from '~/server/utils/db'
 
 export default defineEventHandler(async (event) => {
-  const query = getQuery(event)
-  const { city, term } = query
+  await connectDB()
 
-  const filter: any = { status: 'active' }
+  const q = getQuery(event)
+  const term = String(q.term || '').trim()
+  const city = String(q.city || '').trim()
 
-  if (city) filter.city = city
-  if (term) filter.title = { $regex: term as string, $options: 'i' }
+  const filter: any = {}
+  if (term) {
+    filter.$or = [
+      { title: { $regex: term, $options: 'i' } },
+      { description: { $regex: term, $options: 'i' } },
+      { requirements: { $regex: term, $options: 'i' } }
+    ]
+  }
+  if (city) filter.city = { $regex: city, $options: 'i' }
 
-  const jobs = await Job.find(filter).sort({ createdAt: -1 }).limit(100)
-  return jobs
+  const jobs: any[] = await Job.find(filter).sort({ createdAt: -1 }).lean()
+
+  // Підтягуємо компанію за:
+  // - job.companyId (якщо є)
+  // - або Company.ownerId == job.employerId / job.ownerId / job.userId
+  const companyIds = new Set<string>()
+  const ownerIds = new Set<string>()
+
+  for (const j of jobs) {
+    if (j.companyId) companyIds.add(String(j.companyId))
+    if (j.employerId) ownerIds.add(String(j.employerId))
+    if (j.ownerId) ownerIds.add(String(j.ownerId))
+    if (j.userId) ownerIds.add(String(j.userId))
+  }
+
+  const or: any[] = []
+  if (companyIds.size) or.push({ _id: { $in: Array.from(companyIds) } })
+  if (ownerIds.size) or.push({ ownerId: { $in: Array.from(ownerIds) } })
+
+  const companies: any[] = or.length ? await Company.find({ $or: or }).lean() : []
+  const byId = new Map(companies.map((c) => [String(c._id), c]))
+  const byOwner = new Map(companies.map((c) => [String(c.ownerId), c]))
+
+  return jobs.map((j) => {
+    const c =
+      (j.companyId ? byId.get(String(j.companyId)) : null) ||
+      (j.employerId ? byOwner.get(String(j.employerId)) : null) ||
+      (j.ownerId ? byOwner.get(String(j.ownerId)) : null) ||
+      (j.userId ? byOwner.get(String(j.userId)) : null)
+
+    return {
+      ...j,
+      companyName: c?.name || '',
+      companyPhone: c?.phone || ''
+    }
+  })
 })

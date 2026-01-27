@@ -1,12 +1,29 @@
-import Job from '../../models/Job'
+import Job from '~/server/models/Job'
+import Company from '~/server/models/Company'
+import { connectDB } from '~/server/utils/db'
 
 export default defineEventHandler(async (event) => {
-  const id = event.context.params?.id
-  const job = await Job.findById(id)
-  if (!job) {
-    throw createError({ statusCode: 404, statusMessage: 'Job not found' })
+  await connectDB()
+
+  const id = getRouterParam(event, 'id')
+  if (!id) {
+    throw createError({ statusCode: 400, statusMessage: 'Не вказано id вакансії' })
   }
-  // increment views (fire and forget)
-  Job.findByIdAndUpdate(id, { $inc: { views: 1 } }).exec()
-  return job
+
+  const job: any = await Job.findById(id).lean()
+  if (!job) {
+    throw createError({ statusCode: 404, statusMessage: 'Вакансію не знайдено' })
+  }
+
+  const company =
+    (job.companyId ? await Company.findById(job.companyId).lean() : null) ||
+    (job.employerId ? await Company.findOne({ ownerId: job.employerId }).lean() : null) ||
+    (job.ownerId ? await Company.findOne({ ownerId: job.ownerId }).lean() : null) ||
+    (job.userId ? await Company.findOne({ ownerId: job.userId }).lean() : null)
+
+  return {
+    ...job,
+    companyName: company?.name || '',
+    companyPhone: company?.phone || ''
+  }
 })
