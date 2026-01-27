@@ -1,4 +1,4 @@
-name: TASK009 - Profile: Save button only on changes + saved message
+name: TASK009 - Profile Save button only on changes + saved message
 
 on:
   workflow_dispatch:
