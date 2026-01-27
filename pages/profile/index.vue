@@ -1,7 +1,8 @@
 <script setup lang="ts">
 const user = useAuthUser()
+
 const saving = ref(false)
-const message = ref<string | null>(null)
+const saved = ref(false)
 const error = ref<string | null>(null)
 
 const form = reactive({
@@ -12,27 +13,107 @@ const form = reactive({
   cvLink: ''
 })
 
-const { data } = await useFetch('/api/profile')
+const initial = ref({
+  fullName: '',
+  city: '',
+  desiredPosition: '',
+  level: 'junior',
+  cvLink: ''
+})
 
-if (data.value) {
-  form.fullName = data.value.fullName || ''
-  form.city = data.value.city || ''
-  form.desiredPosition = data.value.desiredPosition || ''
-  form.level = data.value.level || 'junior'
-  form.cvLink = data.value.cvLink || ''
+const fieldErrors = reactive<Record<string, string>>({
+  fullName: '',
+  cvLink: ''
+})
+
+const clearFieldErrors = () => {
+  fieldErrors.fullName = ''
+  fieldErrors.cvLink = ''
 }
 
+const normalizeUrl = (url: string) => url.trim()
+const isHttpUrl = (v: string) => /^https?:\/\/.+/i.test(v.trim())
+
+const validate = () => {
+  clearFieldErrors()
+  let ok = true
+
+  if (!form.fullName.trim()) {
+    fieldErrors.fullName = "Вкажіть повне ім'я"
+    ok = false
+  }
+
+  if (form.cvLink) {
+    const u = normalizeUrl(form.cvLink)
+    if (!isHttpUrl(u)) {
+      fieldErrors.cvLink = 'Лінк на CV має починатися з http:// або https://'
+      ok = false
+    }
+  }
+
+  return ok
+}
+
+const { data, error: fetchError } = await useFetch('/api/profile')
+
+const applyFromServer = (src: any) => {
+  form.fullName = src?.fullName || ''
+  form.city = src?.city || ''
+  form.desiredPosition = src?.desiredPosition || ''
+  form.level = src?.level || 'junior'
+  form.cvLink = src?.cvLink || ''
+
+  initial.value = {
+    fullName: form.fullName,
+    city: form.city,
+    desiredPosition: form.desiredPosition,
+    level: form.level,
+    cvLink: form.cvLink
+  }
+}
+
+if (data.value) applyFromServer(data.value)
+
+const hasChanges = computed(() => {
+  const a = initial.value
+  return (
+    form.fullName !== a.fullName ||
+    form.city !== a.city ||
+    form.desiredPosition !== a.desiredPosition ||
+    form.level !== a.level ||
+    form.cvLink !== a.cvLink
+  )
+})
+
+watch(
+  () => ({ ...form }),
+  () => {
+    if (saved.value) saved.value = false
+  },
+  { deep: true }
+)
+
 const submit = async () => {
-  saving.value = true
-  message.value = null
   error.value = null
+  saved.value = false
+
+  if (!validate()) {
+    error.value = 'Перевірте поля форми'
+    return
+  }
+  if (!hasChanges.value) return
+
+  saving.value = true
   try {
     const res: any = await $fetch('/api/profile', {
       method: 'PUT',
       body: form
     })
-    message.value = 'Профіль збережено'
-    // Оновлюємо локальний стейт користувача (мінімально)
+
+    // зафіксувати "початковий стан" = те, що щойно зберегли
+    applyFromServer(res)
+
+    // мінімально оновлюємо auth user
     if (user.value) {
       user.value = {
         ...user.value,
@@ -42,6 +123,9 @@ const submit = async () => {
         level: res.level
       }
     }
+
+    saved.value = true
+    setTimeout(() => (saved.value = false), 2000)
   } catch (e: any) {
     error.value = e?.data?.statusMessage || 'Помилка збереження профілю'
   } finally {
@@ -58,14 +142,17 @@ const submit = async () => {
       Дані цього профілю використовуються при відгуку на вакансії.
     </p>
 
+    <div v-if="fetchError" class="text-xs text-red-500">
+      {{ fetchError.data?.statusMessage || 'Помилка завантаження профілю' }}
+    </div>
+
     <div v-if="error" class="text-xs text-red-500">
       {{ error }}
     </div>
-    <div v-if="message" class="text-xs text-emerald-600">
-      {{ message }}
-    </div>
 
     <form
+      v-if="!fetchError"
+      novalidate
       @submit.prevent="submit"
       class="space-y-3 bg-white p-4 rounded-2xl border border-slate-200"
     >
@@ -74,9 +161,9 @@ const submit = async () => {
         <input
           v-model="form.fullName"
           type="text"
-          required
           class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
         />
+        <p v-if="fieldErrors.fullName" class="text-[11px] text-red-500">{{ fieldErrors.fullName }}</p>
       </div>
 
       <div class="space-y-1">
@@ -104,9 +191,9 @@ const submit = async () => {
             v-model="form.level"
             class="w-full text-xs px-3 py-2 border rounded-xl outline-none focus:border-accent"
           >
-            <option value="junior">Junior</option>
-            <option value="middle">Middle</option>
-            <option value="senior">Senior</option>
+            <option value="junior">Початковий</option>
+            <option value="middle">Середній</option>
+            <option value="senior">Фахівець</option>
           </select>
         </div>
 
@@ -114,19 +201,32 @@ const submit = async () => {
           <label class="text-xs text-muted">Лінк на CV</label>
           <input
             v-model="form.cvLink"
-            type="url"
+            type="text"
+            inputmode="url"
+            placeholder="https://..."
             class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
           />
+          <p v-if="fieldErrors.cvLink" class="text-[11px] text-red-500">{{ fieldErrors.cvLink }}</p>
         </div>
       </div>
 
-      <button
-        type="submit"
-        :disabled="saving"
-        class="w-full text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90 disabled:opacity-60"
-      >
-        {{ saving ? 'Збереження...' : 'Зберегти' }}
-      </button>
+      <div class="pt-1">
+        <button
+          v-if="hasChanges && !saved"
+          type="submit"
+          :disabled="saving"
+          class="w-full text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90 disabled:opacity-60"
+        >
+          {{ saving ? 'Збереження...' : 'Зберегти' }}
+        </button>
+
+        <div
+          v-else-if="saved"
+          class="w-full text-sm px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 font-medium text-center border border-emerald-200"
+        >
+          Збережено ✓
+        </div>
+      </div>
     </form>
   </section>
 </template>
