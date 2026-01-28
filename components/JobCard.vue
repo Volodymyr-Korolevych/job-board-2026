@@ -12,19 +12,12 @@ type Job = {
   companyPhone?: string
 }
 
-const props = defineProps<{
+defineProps<{
   job: Job
   showDescription?: boolean
 }>()
 
-const showDescription = computed(() => props.showDescription ?? true)
-
-const salaryText = computed(() => {
-  const from = props.job.salaryFrom
-  const to = props.job.salaryTo
-  if (from || to) return `${from || '—'}–${to || '—'} ₴`
-  return ''
-})
+const showDescription = computed(() => (typeof showDescription === 'boolean' ? showDescription : true))
 </script>
 
 <template>
@@ -50,7 +43,9 @@ const salaryText = computed(() => {
       </div>
 
       <div class="text-right text-sm text-primary font-medium whitespace-nowrap">
-        <span v-if="salaryText">{{ salaryText }}</span>
+        <span v-if="job.salaryFrom || job.salaryTo">
+          {{ job.salaryFrom || '—' }}–{{ job.salaryTo || '—' }} ₴
+        </span>
         <span v-else class="text-muted text-xs">Зарплата не вказана</span>
       </div>
     </div>

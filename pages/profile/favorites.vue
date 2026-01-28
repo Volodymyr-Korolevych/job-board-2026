@@ -69,7 +69,16 @@ const removeFromFavorites = async (jobId: string) => {
       <h1 class="text-2xl font-semibold text-primary">Обране</h1>
       <p class="text-sm text-muted mt-1">Ваші збережені вакансії.</p>
     </div>
+  <section class="space-y-6">
+    <div>
+      <h1 class="text-2xl font-semibold text-primary">Обране</h1>
+      <p class="text-sm text-muted mt-1">Ваші збережені вакансії.</p>
+    </div>
 
+    <div v-if="pending" class="text-sm text-muted">Завантаження...</div>
+
+    <div v-else-if="error" class="text-sm text-red-500">
+      {{ (error as any)?.data?.statusMessage || 'Помилка завантаження обраного' }}
     <div v-if="pending" class="text-sm text-muted">Завантаження...</div>
 
     <div v-else-if="error" class="text-sm text-red-500">
