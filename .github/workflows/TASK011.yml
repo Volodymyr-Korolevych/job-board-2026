@@ -184,7 +184,7 @@ jobs:
               const res = await Favorite.deleteOne({ seekerId: user._id, jobId })
               return { ok: true, deletedCount: res.deletedCount || 0 }
             })
-            EOF
+          EOF
 
       - name: Update profile favorites page to delete by favoriteId
         shell: bash
