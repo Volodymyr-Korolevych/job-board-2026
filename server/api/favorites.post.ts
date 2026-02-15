@@ -1,10 +1,11 @@
 import Favorite from '~/server/models/Favorite'
 import { connectDB } from '~/server/utils/db'
+import { getUserFromEvent } from '~/server/utils/getUserFromEvent'
 
 export default defineEventHandler(async (event) => {
   await connectDB()
 
-  const user = (event.context as any).user
+  const user: any = await getUserFromEvent(event)
   if (!user?._id) {
     throw createError({ statusCode: 401, statusMessage: 'Потрібна авторизація' })
   }
@@ -22,7 +23,7 @@ export default defineEventHandler(async (event) => {
     const fav = await Favorite.create({ seekerId: user._id, jobId })
     return { ok: true, favoriteId: String(fav._id) }
   } catch (e: any) {
-    if (String(e?.code) === '11000') return { ok: true, already: true }
+    if (String(e?.code) == '11000') return { ok: true, already: true }
     throw createError({ statusCode: 500, statusMessage: 'Не вдалося додати в обране' })
   }
 })

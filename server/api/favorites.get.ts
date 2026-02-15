@@ -1,11 +1,12 @@
 import Favorite from '~/server/models/Favorite'
 import Company from '~/server/models/Company'
 import { connectDB } from '~/server/utils/db'
+import { getUserFromEvent } from '~/server/utils/getUserFromEvent'
 
 export default defineEventHandler(async (event) => {
   await connectDB()
 
-  const user = (event.context as any).user
+  const user: any = await getUserFromEvent(event)
   if (!user?._id) {
     throw createError({ statusCode: 401, statusMessage: 'Потрібна авторизація' })
   }
