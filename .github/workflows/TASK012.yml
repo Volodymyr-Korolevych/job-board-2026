@@ -1,0 +1,258 @@
+name: TASK012 Favorites fix auth via jb_token and cleanup api structure
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  task012:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cleanup duplicate favorites root handlers
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f server/api/favorites.get.ts server/api/favorites.post.ts server/api/favorites.delete.ts || true
+
+      - name: Write auth helper and favorites folder endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def write(path: str, content: str):
+              p = Path(path)
+              p.parent.mkdir(parents=True, exist_ok=True)
+              p.write_text(content, encoding="utf-8")
+
+          write("server/utils/authUser.ts", """import User from '~/server/models/User'
+          import { H3Event } from 'h3'
+
+          function base64UrlDecode(input: string) {
+            const pad = '='.repeat((4 - (input.length % 4)) % 4)
+            const b64 = (input + pad).replace(/-/g, '+').replace(/_/g, '/')
+            return Buffer.from(b64, 'base64').toString('utf-8')
+          }
+
+          function decodeJwtPayload(token: string) {
+            const parts = token.split('.')
+            if (parts.length !== 3) return null
+            try {
+              const json = base64UrlDecode(parts[1])
+              return JSON.parse(json)
+            } catch {
+              return null
+            }
+          }
+
+          export async function getAuthUser(event: H3Event) {
+            const token = getCookie(event, 'jb_token') || ''
+            if (!token) return null
+
+            const payload: any = decodeJwtPayload(token)
+            const id = payload?.id || payload?.sub || payload?.userId || payload?._id
+            if (!id) return null
+
+            const user: any = await User.findById(id).lean()
+            return user || null
+          }
+
+          export async function requireSeeker(event: H3Event) {
+            const user: any = await getAuthUser(event)
+            if (!user?._id) {
+              throw createError({ statusCode: 401, statusMessage: 'Потрібна авторизація' })
+            }
+            if (user.role !== 'seeker') {
+              throw createError({ statusCode: 403, statusMessage: 'Доступно лише для пошукача' })
+            }
+            return user
+          }
+          """)
+
+          write("server/api/favorites/index.get.ts", """import Favorite from '~/server/models/Favorite'
+          import Company from '~/server/models/Company'
+          import { connectDB } from '~/server/utils/db'
+          import { requireSeeker } from '~/server/utils/authUser'
+
+          export default defineEventHandler(async (event) => {
+            await connectDB()
+            const user = await requireSeeker(event)
+
+            const favorites: any[] = await Favorite.find({ seekerId: user._id })
+              .sort({ createdAt: -1 })
+              .populate('jobId')
+              .lean()
+
+            const jobs: any[] = favorites
+              .map((f) => f.jobId)
+              .filter(Boolean)
+              .map((j) => ({ ...j }))
+
+            const companyIds = new Set<string>()
+            const ownerIds = new Set<string>()
+
+            for (const j of jobs) {
+              if (j.companyId) companyIds.add(String(j.companyId))
+              if (j.employerId) ownerIds.add(String(j.employerId))
+              if (j.ownerId) ownerIds.add(String(j.ownerId))
+              if (j.userId) ownerIds.add(String(j.userId))
+            }
+
+            const or: any[] = []
+            if (companyIds.size) or.push({ _id: { $in: Array.from(companyIds) } })
+            if (ownerIds.size) or.push({ ownerId: { $in: Array.from(ownerIds) } })
+
+            const companies: any[] = or.length ? await Company.find({ $or: or }).lean() : []
+            const byId = new Map(companies.map((c) => [String(c._id), c]))
+            const byOwner = new Map(companies.map((c) => [String(c.ownerId), c]))
+
+            return favorites.map((f) => {
+              const j = f.jobId
+              if (!j) return { _id: String(f._id), createdAt: f.createdAt, job: null }
+
+              const c =
+                (j.companyId ? byId.get(String(j.companyId)) : null) ||
+                (j.employerId ? byOwner.get(String(j.employerId)) : null) ||
+                (j.ownerId ? byOwner.get(String(j.ownerId)) : null) ||
+                (j.userId ? byOwner.get(String(j.userId)) : null)
+
+              return {
+                _id: String(f._id),
+                createdAt: f.createdAt,
+                job: {
+                  ...j,
+                  companyName: c?.name || '',
+                  companyPhone: c?.phone || ''
+                }
+              }
+            })
+          })
+          """)
+
+          write("server/api/favorites/index.post.ts", """import Favorite from '~/server/models/Favorite'
+          import { connectDB } from '~/server/utils/db'
+          import { requireSeeker } from '~/server/utils/authUser'
+
+          export default defineEventHandler(async (event) => {
+            await connectDB()
+            const user = await requireSeeker(event)
+
+            const body = await readBody(event)
+            const jobId = body?.jobId ? String(body.jobId) : ''
+            if (!jobId) {
+              throw createError({ statusCode: 400, statusMessage: 'Не вказано jobId' })
+            }
+
+            try {
+              const fav = await Favorite.create({ seekerId: user._id, jobId })
+              return { ok: true, favoriteId: String(fav._id) }
+            } catch (e: any) {
+              if (String(e?.code) === '11000') return { ok: true, already: true }
+              throw createError({ statusCode: 500, statusMessage: 'Не вдалося додати в обране' })
+            }
+          })
+          """)
+
+          write("server/api/favorites/[id].delete.ts", """import Favorite from '~/server/models/Favorite'
+          import { connectDB } from '~/server/utils/db'
+          import { requireSeeker } from '~/server/utils/authUser'
+
+          export default defineEventHandler(async (event) => {
+            await connectDB()
+            const user = await requireSeeker(event)
+
+            const id = getRouterParam(event, 'id')
+            if (!id) {
+              throw createError({ statusCode: 400, statusMessage: 'Не вказано id' })
+            }
+
+            const res = await Favorite.deleteOne({ _id: id, seekerId: user._id })
+            return { ok: true, deletedCount: res.deletedCount || 0 }
+          })
+          """)
+          PY
+
+      - name: Update profile favorites page to use /api/favorites and delete by /api/favorites/:id
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def write(path: str, content: str):
+              p = Path(path)
+              p.parent.mkdir(parents=True, exist_ok=True)
+              p.write_text(content, encoding="utf-8")
+
+          write("pages/profile/favorites.vue", """<script setup lang="ts">
+          import JobCard from '~/components/JobCard.vue'
+
+          type Item = {
+            _id: string
+            createdAt?: string
+            job: any
+          }
+
+          const { $notify } = useNuxtApp()
+
+          const { data: items, refresh, pending, error } = await useFetch<Item[]>('/api/favorites')
+
+          const removeFavorite = async (favoriteId: string) => {
+            try {
+              const res: any = await $fetch(`/api/favorites/${favoriteId}`, { method: 'DELETE' })
+              if ((res?.deletedCount || 0) > 0) $notify('Видалено з обраного', 'success')
+              else $notify('Запис не знайдено або вже видалено', 'warning')
+              await refresh()
+            } catch (e: any) {
+              $notify(e?.data?.statusMessage || 'Не вдалося видалити з обраного', 'error')
+            }
+          }
+          </script>
+
+          <template>
+            <section class="space-y-6">
+              <div>
+                <h1 class="text-2xl font-semibold text-primary">Обране</h1>
+                <p class="text-sm text-muted mt-1">Ваші збережені вакансії</p>
+              </div>
+
+              <div v-if="pending" class="text-sm text-muted">Завантаження...</div>
+
+              <div v-else-if="error" class="text-sm text-red-500">
+                {{ (error as any)?.data?.statusMessage || 'Помилка завантаження обраного' }}
+              </div>
+
+              <div v-else class="space-y-3">
+                <div v-if="!items?.length" class="text-sm text-muted">Поки що немає обраних вакансій</div>
+
+                <div v-for="fav in items" :key="fav._id" class="space-y-2">
+                  <JobCard v-if="fav.job" :job="fav.job" :show-description="true" />
+                  <button
+                    class="text-xs px-3 py-2 rounded-xl border border-slate-300 hover:border-red-400 hover:text-red-600"
+                    @click="removeFavorite(fav._id)"
+                  >
+                    Видалити з обраного
+                  </button>
+                </div>
+              </div>
+            </section>
+          </template>
+          """)
+          PY
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add server/utils/authUser.ts server/api/favorites/index.get.ts server/api/favorites/index.post.ts server/api/favorites/[id].delete.ts pages/profile/favorites.vue
+          git add -u
+          git commit -m "TASK012: favorites auth via jb_token + cleanup api/favorites structure" || echo "No changes"
+          git push
