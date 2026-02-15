@@ -153,7 +153,7 @@ jobs:
             EOF
 
           mkdir -p server/api/favorites
-          cat > server/api/favorites/index.delete.ts <<'EOFFFF'
+          cat > server/api/favorites/index.delete.ts <<'EOF'
           import Favorite from '~/server/models/Favorite'
           import { connectDB } from '~/server/utils/db'
           
@@ -184,7 +184,7 @@ jobs:
             const res = await Favorite.deleteOne({ seekerId: user._id, jobId })
             return { ok: true, deletedCount: res.deletedCount || 0 }
           })
-          EOFFFF
+          EOF
 
       - name: Update profile favorites page to delete by favoriteId
         shell: bash
