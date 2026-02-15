@@ -152,7 +152,8 @@ jobs:
             })
             EOF
 
-          cat > server/api/favorites.delete.ts <<'EOF'
+          mkdir -p server/api/favorites
+          cat > server/api/favorites/index.delete.ts <<'EOF'
             import Favorite from '~/server/models/Favorite'
             import { connectDB } from '~/server/utils/db'
             
@@ -207,9 +208,11 @@ jobs:
                 companyPhone?: string
               }
               
-              defineProps<{ job: Job; showDescription?: boolean }>()
-              
-              const showDescription = computed(() => (typeof showDescription === 'boolean' ? showDescription : true))
+              interface Props {
+                job: Job
+                showDescription?: boolean
+              }
+              const props = defineProps<Props>()
               </script>
               
               <template>
@@ -242,7 +245,7 @@ jobs:
                     </div>
                   </div>
               
-                  <p v-if="showDescription && job.description" class="text-xs text-slate-600">
+                  <p v-if="props.showDescription && job.description" class="text-xs text-slate-600">
                     {{ job.description }}
                   </p>
                 </article>
@@ -317,7 +320,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add server/api/favorites.get.ts server/api/favorites.post.ts server/api/favorites.delete.ts
+          git add server/api/favorites.get.ts server/api/favorites.post.ts server/api/favorites/index.delete.ts
           git add pages/profile/favorites.vue components/JobCard.vue
           git commit -m "TASK011: favorites per seeker + delete by favoriteId or jobId" || echo "No changes"
           git push
