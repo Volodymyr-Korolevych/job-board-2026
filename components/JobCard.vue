@@ -12,10 +12,7 @@ type Job = {
   companyPhone?: string
 }
 
-defineProps<{
-  job: Job
-  showDescription?: boolean
-}>()
+defineProps<{ job: Job; showDescription?: boolean }>()
 
 const showDescription = computed(() => (typeof showDescription === 'boolean' ? showDescription : true))
 </script>
