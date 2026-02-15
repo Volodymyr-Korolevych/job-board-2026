@@ -1,23 +1,22 @@
-import Favorite from '../../models/Favorite'
+import Favorite from '~/server/models/Favorite'
+import { connectDB } from '~/server/utils/db'
+import { requireSeeker } from '~/server/utils/authUser'
 
 export default defineEventHandler(async (event) => {
-  // @ts-ignore
-  const user = event.context.user
-  if (!user || user.role !== 'seeker') {
-    throw createError({ statusCode: 401, statusMessage: 'Only seekers' })
-  }
+  await connectDB()
+  const user = await requireSeeker(event)
 
   const body = await readBody(event)
-  const { jobId } = body
+  const jobId = body?.jobId ? String(body.jobId) : ''
   if (!jobId) {
-    throw createError({ statusCode: 400, statusMessage: 'jobId required' })
+    throw createError({ statusCode: 400, statusMessage: 'Не вказано jobId' })
   }
 
-  const fav = await Favorite.findOneAndUpdate(
-    { seekerId: user.id, jobId },
-    { seekerId: user.id, jobId },
-    { upsert: true, new: true }
-  )
-
-  return fav
+  try {
+    const fav = await Favorite.create({ seekerId: user._id, jobId })
+    return { ok: true, favoriteId: String(fav._id) }
+  } catch (e: any) {
+    if (String(e?.code) === '11000') return { ok: true, already: true }
+    throw createError({ statusCode: 500, statusMessage: 'Не вдалося додати в обране' })
+  }
 })

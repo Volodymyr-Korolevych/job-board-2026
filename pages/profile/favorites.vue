@@ -13,7 +13,7 @@ const { data: items, refresh, pending, error } = await useFetch<Item[]>('/api/fa
 
 const removeFavorite = async (favoriteId: string) => {
   try {
-    const res: any = await $fetch('/api/favorites', { method: 'DELETE', body: { favoriteId } })
+    const res: any = await $fetch(`/api/favorites/${favoriteId}`, { method: 'DELETE' })
     if ((res?.deletedCount || 0) > 0) $notify('Видалено з обраного', 'success')
     else $notify('Запис не знайдено або вже видалено', 'warning')
     await refresh()
@@ -27,7 +27,7 @@ const removeFavorite = async (favoriteId: string) => {
   <section class="space-y-6">
     <div>
       <h1 class="text-2xl font-semibold text-primary">Обране</h1>
-      <p class="text-sm text-muted mt-1">Ваші збережені вакансії.</p>
+      <p class="text-sm text-muted mt-1">Ваші збережені вакансії</p>
     </div>
 
     <div v-if="pending" class="text-sm text-muted">Завантаження...</div>
