@@ -1,0 +1,323 @@
+name: TASK011 - Favorites per seeker + delete by favoriteId or jobId
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  task011:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Write favorites API handlers
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p server/api server/utils
+
+          if [ ! -f server/utils/db.ts ]; then
+            mkdir -p server/utils
+            cat > server/utils/db.ts <<'EOF'
+            import mongoose from 'mongoose'
+            
+            let cached: { conn: typeof mongoose | null; promise: Promise<typeof mongoose> | null } =
+              // @ts-expect-error global cache
+              globalThis.__mongoose_cache || { conn: null, promise: null }
+            
+            // @ts-expect-error global cache
+            globalThis.__mongoose_cache = cached
+            
+            export async function connectDB() {
+              if (cached.conn) return cached.conn
+              if (!cached.promise) {
+                const uri = process.env.MONGODB_URI || process.env.MONGODB_URL
+                if (!uri) throw new Error('MONGODB_URI (або MONGODB_URL) не задано в .env')
+                cached.promise = mongoose.connect(uri, { dbName: process.env.MONGODB_DB || undefined })
+              }
+              cached.conn = await cached.promise
+              return cached.conn
+            }
+            EOF
+          fi
+
+          cat > server/api/favorites.get.ts <<'EOF'
+            import Favorite from '~/server/models/Favorite'
+            import Company from '~/server/models/Company'
+            import { connectDB } from '~/server/utils/db'
+            
+            export default defineEventHandler(async (event) => {
+              await connectDB()
+            
+              const user = (event.context as any).user
+              if (!user?._id) {
+                throw createError({ statusCode: 401, statusMessage: 'Потрібна авторизація' })
+              }
+              if (user.role !== 'seeker') {
+                throw createError({ statusCode: 403, statusMessage: 'Доступно лише для пошукача' })
+              }
+            
+              const favorites: any[] = await Favorite.find({ seekerId: user._id })
+                .sort({ createdAt: -1 })
+                .populate('jobId')
+                .lean()
+            
+              const jobs: any[] = favorites
+                .map((f) => f.jobId)
+                .filter(Boolean)
+                .map((j) => ({ ...j }))
+            
+              const companyIds = new Set<string>()
+              const ownerIds = new Set<string>()
+            
+              for (const j of jobs) {
+                if (j.companyId) companyIds.add(String(j.companyId))
+                if (j.employerId) ownerIds.add(String(j.employerId))
+                if (j.ownerId) ownerIds.add(String(j.ownerId))
+                if (j.userId) ownerIds.add(String(j.userId))
+              }
+            
+              const or: any[] = []
+              if (companyIds.size) or.push({ _id: { $in: Array.from(companyIds) } })
+              if (ownerIds.size) or.push({ ownerId: { $in: Array.from(ownerIds) } })
+            
+              const companies: any[] = or.length ? await Company.find({ $or: or }).lean() : []
+              const byId = new Map(companies.map((c) => [String(c._id), c]))
+              const byOwner = new Map(companies.map((c) => [String(c.ownerId), c]))
+            
+              const enriched = favorites.map((f) => {
+                const j = f.jobId
+                if (!j) {
+                  return { _id: String(f._id), job: null, createdAt: f.createdAt }
+                }
+            
+                const c =
+                  (j.companyId ? byId.get(String(j.companyId)) : null) ||
+                  (j.employerId ? byOwner.get(String(j.employerId)) : null) ||
+                  (j.ownerId ? byOwner.get(String(j.ownerId)) : null) ||
+                  (j.userId ? byOwner.get(String(j.userId)) : null)
+            
+                return {
+                  _id: String(f._id),
+                  createdAt: f.createdAt,
+                  job: {
+                    ...j,
+                    companyName: c?.name || '',
+                    companyPhone: c?.phone || ''
+                  }
+                }
+              })
+            
+              return enriched
+            })
+            EOF
+
+          cat > server/api/favorites.post.ts <<'EOF'
+            import Favorite from '~/server/models/Favorite'
+            import { connectDB } from '~/server/utils/db'
+            
+            export default defineEventHandler(async (event) => {
+              await connectDB()
+            
+              const user = (event.context as any).user
+              if (!user?._id) {
+                throw createError({ statusCode: 401, statusMessage: 'Потрібна авторизація' })
+              }
+              if (user.role !== 'seeker') {
+                throw createError({ statusCode: 403, statusMessage: 'Доступно лише для пошукача' })
+              }
+            
+              const body = await readBody(event)
+              const jobId = body?.jobId ? String(body.jobId) : ''
+              if (!jobId) {
+                throw createError({ statusCode: 400, statusMessage: 'Не вказано jobId' })
+              }
+            
+              try {
+                const fav = await Favorite.create({ seekerId: user._id, jobId })
+                return { ok: true, favoriteId: String(fav._id) }
+              } catch (e: any) {
+                if (String(e?.code) === '11000') {
+                  return { ok: true, already: true }
+                }
+                throw createError({ statusCode: 500, statusMessage: 'Не вдалося додати в обране' })
+              }
+            })
+            EOF
+
+          cat > server/api/favorites.delete.ts <<'EOF'
+            import Favorite from '~/server/models/Favorite'
+            import { connectDB } from '~/server/utils/db'
+            
+            export default defineEventHandler(async (event) => {
+              await connectDB()
+            
+              const user = (event.context as any).user
+              if (!user?._id) {
+                throw createError({ statusCode: 401, statusMessage: 'Потрібна авторизація' })
+              }
+              if (user.role !== 'seeker') {
+                throw createError({ statusCode: 403, statusMessage: 'Доступно лише для пошукача' })
+              }
+            
+              const body = await readBody(event)
+              const favoriteId = body?.favoriteId ? String(body.favoriteId) : ''
+              const jobId = body?.jobId ? String(body.jobId) : ''
+            
+              if (!favoriteId && !jobId) {
+                throw createError({ statusCode: 400, statusMessage: 'Не вказано favoriteId або jobId' })
+              }
+            
+              if (favoriteId) {
+                const res = await Favorite.deleteOne({ _id: favoriteId, seekerId: user._id })
+                return { ok: true, deletedCount: res.deletedCount || 0 }
+              }
+            
+              const res = await Favorite.deleteOne({ seekerId: user._id, jobId })
+              return { ok: true, deletedCount: res.deletedCount || 0 }
+            })
+            EOF
+
+      - name: Update profile favorites page to delete by favoriteId
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p pages/profile components
+
+          if [ ! -f components/JobCard.vue ]; then
+            cat > components/JobCard.vue <<'EOF'
+              <script setup lang="ts">
+              type Job = {
+                _id: string
+                title?: string
+                city?: string
+                employmentType?: string
+                workFormat?: string
+                salaryFrom?: number | string | null
+                salaryTo?: number | string | null
+                description?: string
+                companyName?: string
+                companyPhone?: string
+              }
+              
+              defineProps<{ job: Job; showDescription?: boolean }>()
+              
+              const showDescription = computed(() => (typeof showDescription === 'boolean' ? showDescription : true))
+              </script>
+              
+              <template>
+                <article class="bg-white p-4 rounded-2xl border border-slate-200 hover:border-accent transition flex flex-col gap-2">
+                  <div class="flex justify-between gap-4 items-start">
+                    <div class="min-w-0">
+                      <NuxtLink :to="`/jobs/${job._id}`" class="text-base font-semibold text-primary hover:text-accent">
+                        {{ job.title || 'Без назви' }}
+                      </NuxtLink>
+              
+                      <p class="text-xs text-muted mt-1">
+                        {{ job.city || 'Місто не вказано' }}
+                        <template v-if="job.employmentType"> · {{ job.employmentType }}</template>
+                        <template v-if="job.workFormat"> · {{ job.workFormat }}</template>
+                      </p>
+              
+                      <p v-if="job.companyName || job.companyPhone" class="text-xs text-slate-700 mt-1">
+                        <span v-if="job.companyName" class="font-medium">{{ job.companyName }}</span>
+                        <span v-if="job.companyName && job.companyPhone"> · </span>
+                        <span v-if="job.companyPhone">{{ job.companyPhone }}</span>
+                      </p>
+                      <p v-else class="text-xs text-muted mt-1">Компанія: не вказано</p>
+                    </div>
+              
+                    <div class="text-right text-sm text-primary font-medium whitespace-nowrap">
+                      <span v-if="job.salaryFrom || job.salaryTo">
+                        {{ job.salaryFrom || '—' }}–{{ job.salaryTo || '—' }} ₴
+                      </span>
+                      <span v-else class="text-muted text-xs">Зарплата не вказана</span>
+                    </div>
+                  </div>
+              
+                  <p v-if="showDescription && job.description" class="text-xs text-slate-600">
+                    {{ job.description }}
+                  </p>
+                </article>
+              </template>
+              EOF
+          fi
+
+          cat > pages/profile/favorites.vue <<'EOF'
+            <script setup lang="ts">
+            import JobCard from '~/components/JobCard.vue'
+            
+            type Item = {
+              _id: string
+              createdAt?: string
+              job: any
+            }
+            
+            const { $notify } = useNuxtApp()
+            
+            const { data: items, refresh, pending, error } = await useFetch<Item[]>('/api/favorites')
+            
+            const removeFavorite = async (favoriteId: string) => {
+              try {
+                const res: any = await $fetch('/api/favorites', { method: 'DELETE', body: { favoriteId } })
+                if ((res?.deletedCount || 0) > 0) {
+                  $notify('Видалено з обраного', 'success')
+                } else {
+                  $notify('Запис не знайдено або вже видалено', 'warning')
+                }
+                await refresh()
+              } catch (e: any) {
+                $notify(e?.data?.statusMessage || 'Не вдалося видалити з обраного', 'error')
+              }
+            }
+            </script>
+            
+            <template>
+              <section class="space-y-6">
+                <div>
+                  <h1 class="text-2xl font-semibold text-primary">Обране</h1>
+                  <p class="text-sm text-muted mt-1">Ваші збережені вакансії.</p>
+                </div>
+            
+                <div v-if="pending" class="text-sm text-muted">Завантаження...</div>
+            
+                <div v-else-if="error" class="text-sm text-red-500">
+                  {{ (error as any)?.data?.statusMessage || 'Помилка завантаження обраного' }}
+                </div>
+            
+                <div v-else class="space-y-3">
+                  <div v-if="!items?.length" class="text-sm text-muted">Поки що немає обраних вакансій</div>
+            
+                  <div v-for="fav in items" :key="fav._id" class="space-y-2">
+                    <JobCard v-if="fav.job" :job="fav.job" :show-description="true" />
+            
+                    <button
+                      class="text-xs px-3 py-2 rounded-xl border border-slate-300 hover:border-red-400 hover:text-red-600"
+                      @click="removeFavorite(fav._id)"
+                    >
+                      Видалити з обраного
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </template>
+            EOF
+
+      - name: Commit and push TASK011
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add server/api/favorites.get.ts server/api/favorites.post.ts server/api/favorites.delete.ts
+          git add pages/profile/favorites.vue components/JobCard.vue
+          git commit -m "TASK011: favorites per seeker + delete by favoriteId or jobId" || echo "No changes"
+          git push
