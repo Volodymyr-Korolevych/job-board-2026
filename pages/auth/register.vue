@@ -45,9 +45,19 @@ const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
 const isHttpUrl = (v: string) => /^https?:\/\/.+/i.test(v.trim())
 
 // Телефон: дозволяємо +, цифри, пробіли, (), -, але перевіряємо що цифр >= 10
-const normalizePhone = (v: string) => v.trim()
+
+const normalizePhone = (v: string) => {
+  const digits = v.replace(/\D/g, '')
+
+  // дозволяємо тільки 9 цифр після +380
+  if (digits.length !== 9) return null
+
+  return '+380' + digits
+}
+
 const isValidPhone = (v: string) => {
   const s = normalizePhone(v)
+  if (!s) return false
   if (!/^[+\d\s().-]+$/.test(s)) return false
   const digits = s.replace(/\D/g, '')
   return digits.length >= 10
@@ -104,9 +114,8 @@ const validate = () => {
       ok = false
     }
 
-    // TASK007: телефон (не обов'язковий, але якщо введений — має бути коректним)
-    if (companyProfile.phone && !isValidPhone(companyProfile.phone)) {
-      fieldErrors.phone = 'Вкажіть коректний номер телефону (мінімум 10 цифр)'
+    if ( !isValidPhone(companyProfile.phone)) {
+      fieldErrors.phone = 'Вкажіть коректний номер телефону (9 цифр)'
       ok = false
     }
 
@@ -153,7 +162,7 @@ const submit = async () => {
       Object.assign(body, {
         companyName: companyProfile.name,
         companyCity: companyProfile.city,
-        companyPhone: companyProfile.phone.trim(), // TASK007
+        companyPhone: normalizePhone(companyProfile.phone), 
         companyWebsite: companyProfile.website,
         companyDescription: companyProfile.description,
         companyIndustry: companyProfile.industry,
@@ -327,16 +336,21 @@ const submit = async () => {
             />
           </div>
 
-          <div class="space-y-1">
-            <label class="text-xs text-muted">Контактний телефон (опційно)</label>
-            <input
-              v-model="companyProfile.phone"
-              type="text"
-              inputmode="tel"
-              placeholder="+380..."
-              class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
-            />
-            <p v-if="fieldErrors.phone" class="text-[11px] text-red-500">{{ fieldErrors.phone }}</p>
+        <div class="space-y-1">
+            <label class="text-xs text-muted">Телефон</label>
+
+            <div class="flex">
+              <span class="px-3 py-2 text-sm border border-r-0 rounded-l-xl bg-slate-50 text-slate-600">
+                +380
+              </span>
+
+              <input v-model="companyProfile.phone" inputmode="numeric" maxlength="9" placeholder="971234567"
+                class="flex-1 text-sm px-3 py-2 border rounded-r-xl outline-none focus:border-accent" />
+            </div>
+
+            <p v-if="fieldErrors.phone" class="text-[11px] text-red-500">
+              {{ fieldErrors.phone }}
+            </p>
           </div>
         </div>
 

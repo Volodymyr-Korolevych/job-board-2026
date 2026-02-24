@@ -2,6 +2,19 @@ import { verifyToken } from '../utils/jwt'
 import User from '../models/User'
 
 export default defineEventHandler(async (event) => {
+
+
+  const path = getRequestURL(event).pathname
+
+  if (
+    !path.startsWith('/api') ||
+    path.startsWith('/_nuxt') ||
+    path.startsWith('/__')
+  ) {
+    return
+  }
+
+
   const token = getCookie(event, 'jb_token')
   if (!token) return
 

@@ -1,6 +1,10 @@
 // nuxt.config.ts
 export default defineNuxtConfig({
-  devtools: { enabled: true },
+  devtools: { enabled: false },
+
+  experimental: {
+    appManifest: false
+  },
 
   modules: [
     '@nuxtjs/tailwindcss',

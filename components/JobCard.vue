@@ -15,6 +15,12 @@ type Job = {
 defineProps<{ job: Job; showDescription?: boolean }>()
 
 const showDescription = computed(() => (typeof showDescription === 'boolean' ? showDescription : true))
+
+const formatPhone = (v: string) => {
+  const d = v.replace('+380', '')
+  return `+380 ${d.slice(0, 2)} ${d.slice(2, 5)} ${d.slice(5, 7)}${d.slice(7, 9)}`
+}
+
 </script>
 
 <template>
@@ -34,7 +40,7 @@ const showDescription = computed(() => (typeof showDescription === 'boolean' ? s
         <p v-if="job.companyName || job.companyPhone" class="text-xs text-slate-700 mt-1">
           <span v-if="job.companyName" class="font-medium">{{ job.companyName }}</span>
           <span v-if="job.companyName && job.companyPhone"> · </span>
-          <span v-if="job.companyPhone">{{ job.companyPhone }}</span>
+          <span v-if="job.companyPhone">{{ formatPhone(job.companyPhone) }}</span>
         </p>
         <p v-else class="text-xs text-muted mt-1">Компанія: не вказано</p>
       </div>

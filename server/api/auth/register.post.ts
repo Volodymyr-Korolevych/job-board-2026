@@ -22,7 +22,8 @@ export default defineEventHandler(async (event) => {
     companyWebsite,
     companyDescription,
     companyIndustry,
-    companyStaffCount
+    companyStaffCount,
+    companyPhone
   } = body
 
   if (!email || !password || !role) {
@@ -61,7 +62,8 @@ export default defineEventHandler(async (event) => {
       website: companyWebsite || '',
       description: companyDescription || '',
       industry: companyIndustry || '',
-      staffCount: companyStaffCount || null
+      staffCount: companyStaffCount || null,
+      phone: companyPhone || ''
     })
   }
 

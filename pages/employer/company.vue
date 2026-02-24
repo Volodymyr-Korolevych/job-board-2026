@@ -42,9 +42,7 @@ const normalizeUrl = (url: string) => url.trim()
 const normalizePhone = (v: string) => v.trim()
 const isValidPhone = (v: string) => {
   const s = normalizePhone(v)
-  if (!/^[+\d\s().-]+$/.test(s)) return false
-  const digits = s.replace(/\D/g, '')
-  return digits.length >= 10
+  return /^\+380\d{9}$/.test(s)
 }
 
 const validate = () => {
@@ -56,12 +54,12 @@ const validate = () => {
     ok = false
   }
 
-  if (form.phone) {
+
     if (!isValidPhone(form.phone)) {
-      fieldErrors.phone = 'Вкажіть коректний номер телефону (мінімум 10 цифр)'
+      fieldErrors.phone = 'Вкажіть коректний номер телефону (9 цифр після +380)'
       ok = false
     }
-  }
+
 
   if (form.website) {
     const u = normalizeUrl(form.website)
@@ -199,12 +197,11 @@ const submit = async () => {
         </div>
 
         <div class="space-y-1">
-          <label class="text-xs text-muted">Контактний телефон (опційно)</label>
+          <label class="text-xs text-muted">Телефон</label>
           <input
             v-model="form.phone"
             type="text"
             inputmode="tel"
-            placeholder="+380..."
             class="w-full text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
           />
           <p v-if="fieldErrors.phone" class="text-[11px] text-red-500">{{ fieldErrors.phone }}</p>
