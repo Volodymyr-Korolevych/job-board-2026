@@ -24,28 +24,28 @@ const formatPhone = (v: string) => {
 </script>
 
 <template>
-  <article class="bg-white p-4 rounded-2xl border border-slate-200 hover:border-accent transition flex flex-col gap-2">
+  <article class="vacancy-card">
     <div class="flex justify-between gap-4 items-start">
       <div class="min-w-0">
-        <NuxtLink :to="`/jobs/${job._id}`" class="text-base font-semibold text-primary hover:text-accent">
+        <NuxtLink :to="`/jobs/${job._id}`" class="text-lg font-bold">
           {{ job.title || 'Без назви' }}
         </NuxtLink>
 
-        <p class="text-xs text-muted mt-1">
+        <p class="mt-2 text-sm text-ink-600 flex flex-wrap gap-2 items-center">
           {{ job.city || 'Місто не вказано' }}
           <template v-if="job.employmentType"> · {{ job.employmentType }}</template>
           <template v-if="job.workFormat"> · {{ job.workFormat }}</template>
         </p>
 
         <p v-if="job.companyName || job.companyPhone" class="text-xs text-slate-700 mt-1">
-          <span v-if="job.companyName" class="font-medium">{{ job.companyName }}</span>
+          <span class="font-semibold text-ink-700" v-if="job.companyName">{{ job.companyName }}</span>
           <span v-if="job.companyName && job.companyPhone"> · </span>
-          <span v-if="job.companyPhone">{{ formatPhone(job.companyPhone) }}</span>
+          <span class="font-semibold text-ink-900"  v-if="job.companyPhone">{{ formatPhone(job.companyPhone) }}</span>
         </p>
         <p v-else class="text-xs text-muted mt-1">Компанія: не вказано</p>
       </div>
 
-      <div class="text-right text-sm text-primary font-medium whitespace-nowrap">
+      <div class="font-semibold">
         <span v-if="job.salaryFrom || job.salaryTo">
           {{ job.salaryFrom || '—' }}–{{ job.salaryTo || '—' }} ₴
         </span>
@@ -53,7 +53,7 @@ const formatPhone = (v: string) => {
       </div>
     </div>
 
-    <p v-if="showDescription && job.description" class="text-xs text-slate-600">
+    <p v-if="showDescription && job.description" class="mt-3 text-sm text-ink-700 line-clamp-2">
       {{ job.description }}
     </p>
   </article>

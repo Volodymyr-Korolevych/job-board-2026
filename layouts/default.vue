@@ -1,17 +1,18 @@
 <template>
-  <div class="min-h-screen flex flex-col bg-slate-50">
+  <div class="min-h-dvh flex flex-col bg-page">
     <AppHeader />
 
-    <main class="flex-1 mx-auto max-w-5xl w-full px-4 py-6">
+    <main class="container-page flex-1 pt-10 md:pt-12 pb-10">
       <NuxtPage />
     </main>
 
-    <footer class="border-t border-slate-200 bg-white">
-      <div class="mx-auto max-w-5xl px-4 py-4 text-xs text-slate-500 flex justify-between">
-        <span>© 2026 JobBoard-2026</span>
-        <div class="flex gap-4">
-          <NuxtLink to="/about" class="hover:text-accent">Про нас</NuxtLink>
-          <NuxtLink to="/contacts" class="hover:text-accent">Контакти</NuxtLink>
+    <footer class="mt-auto border-t border-line bg-slate-50">
+      <div class="container-page py-4 flex justify-between items-center">
+        <span class="text-ms text-ink-600">© 2026 JobBoard-2026</span>
+
+        <div class="flex gap-6 text-md font-medium">
+          <NuxtLink to="/about" class="text-ink-700 hover:text-brand-700">Про нас</NuxtLink>
+          <NuxtLink to="/contacts" class="text-ink-700 hover:text-brand-700">Контакти</NuxtLink>
         </div>
       </div>
     </footer>

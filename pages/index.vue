@@ -16,33 +16,20 @@ const search = async () => {
 <template>
   <section class="space-y-6">
     <div>
-      <h1 class="text-2xl font-semibold text-primary">Вакансії</h1>
-      <p class="text-sm text-muted mt-1">Знайдіть роботу або перегляньте актуальні пропозиції.</p>
+      <h1 class="text-3xl font-bold text-ink-900">Вакансії</h1>
+      <p class="mt-1 text-ink-600">Знайдіть роботу або перегляньте актуальні пропозиції</p>
     </div>
 
-    <div class="grid gap-3 md:grid-cols-4 items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-      <input
-        v-model="term"
-        type="text"
-        placeholder="Посада або ключові слова"
-        class="md:col-span-2 text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
-      />
-      <input
-        v-model="city"
-        type="text"
-        placeholder="Місто"
-        class="text-sm px-3 py-2 border rounded-xl outline-none focus:border-accent"
-      />
-      <button
-        @click="search"
-        class="text-sm px-4 py-2 rounded-xl bg-accent text-white font-medium hover:opacity-90"
-      >
+    <div class="grid gap-3 md:grid-cols-4 items-center bg-white p-4 rounded-2xl shadow-sm border border-line">
+      <input v-model="term" type="text" placeholder="Посада або ключові слова" class="input md:col-span-2" />
+      <input v-model="city" type="text" placeholder="Місто" class="input" />
+      <button @click="search" class="btn-primary w-full">
         Пошук
       </button>
     </div>
 
-    <div class="space-y-3">
-      <div v-if="!jobs?.length" class="text-sm text-muted">
+    <div class="space-y-4 pb-6">
+      <div v-if="!jobs?.length" class="text-sm text-ink-600">
         За введеними критеріями для пошуку вакансій поки немає
       </div>
 
